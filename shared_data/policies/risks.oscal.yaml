@@ -1,0 +1,153 @@
+assessment-plan:
+  metadata:
+    title: "EU AI Act Compliance - Spine Segmentation"
+    version: "1.0.0"
+    oscal-version: "1.0.0"
+  
+  reviewed-controls:
+    control-implementations:
+      - description: "Article 10: Data Governance"
+        implemented-requirements:
+          - control-id: data-demographic-parity
+            description: "Ensure minority sex representation > 30%"
+            props:
+              - name: severity
+                value: high
+              - name: metric_key
+                value: minority_sex_prop
+              - name: threshold
+                value: "0.30"
+              - name: operator
+                value: gt
+              - name: article
+                value: "10"
+
+          - control-id: robustness-scanner-bias
+            description: "Ensure min Dice > 0.85 across all major Scanner Manufacturers"
+            props:
+              - name: severity
+                value: high
+              - name: metric_key
+                value: min_scanner_dice
+              - name: threshold
+                value: "0.85"
+              - name: operator
+                value: gt
+              - name: article
+                value: "15"
+
+          - control-id: safety-small-volume
+            description: "Ensure safety on small lesions (Bottom 25% vol) > 0.75 Dice"
+            props:
+              - name: severity
+                value: critical
+              - name: metric_key
+                value: small_vol_dice
+              - name: threshold
+                value: "0.75"
+              - name: operator
+                value: gt
+              - name: article
+                value: "15"
+
+          - control-id: robustness-lesion-type
+            description: "Robustness across Lytic/Blastic clinical phenotypes > 0.80"
+            props:
+              - name: severity
+                value: high
+              - name: metric_key
+                value: min_lesion_type_dice
+              - name: threshold
+                value: "0.80"
+              - name: operator
+                value: gt
+              - name: article
+                value: "15"
+  
+      - description: "Article 15: Accuracy & Robustness"
+        implemented-requirements:
+          - control-id: model-accuracy-global
+            description: "Global Mean Dice > 0.85"
+            props:
+              - name: severity
+                value: critical
+              - name: metric_key
+                value: global_dice
+              - name: threshold
+                value: "0.85"
+              - name: operator
+                value: gt
+              - name: article
+                value: "15"
+  
+          - control-id: fairness-gender-gap
+            description: "Performance gap between Male/Female < 5%"
+            props:
+              - name: severity
+                value: high
+              - name: metric_key
+                value: gender_gap
+              - name: threshold
+                value: "0.05"
+              - name: operator
+                value: lt
+              - name: article
+                value: "15"
+  
+          - control-id: robustness-age-bias
+            description: "Performance drop in elderly (>70) < 10%"
+            props:
+              - name: severity
+                value: high
+              - name: metric_key
+                value: age_bias
+              - name: threshold
+                value: "0.10"
+              - name: operator
+                value: lt
+              - name: article
+                value: "15"
+  
+          - control-id: robustness-cancer-types
+            description: "Min Dice > 0.80 for top 3 cancer types"
+            props:
+              - name: severity
+                value: critical
+              - name: metric_key
+                value: min_cancer_dice
+              - name: threshold
+                value: "0.80"
+              - name: operator
+                value: gt
+              - name: article
+                value: "15"
+
+          - control-id: data-leakage-check
+            description: "Max Dice < 0.99 to exclude train-test leakage"
+            props:
+              - name: severity
+                value: critical
+              - name: metric_key
+                value: max_single_dice
+              - name: threshold
+                value: "0.99"
+              - name: operator
+                value: lt
+              - name: article
+                value: "15"
+  
+      - description: "Article 15: Safety"
+        implemented-requirements:
+          - control-id: safety-calibration
+            description: "Positive correlation (r > 0.5) between Confidence and Dice"
+            props:
+              - name: severity
+                value: medium
+              - name: metric_key
+                value: confidence_correlation
+              - name: threshold
+                value: "0.5"
+              - name: operator
+                value: gt
+              - name: article
+                value: "15"

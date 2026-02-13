@@ -1,0 +1,110 @@
+catalog:
+  uuid: "medical-spine-v1"
+  metadata:
+    title: "Medical Spine Segmentation Governance"
+    version: "1.0"
+    oscal-version: "1.0.0"
+
+  controls:
+    - id: "M.1"
+      title: "Dice Coefficient Performance"
+      description: "Ensure the segmentation model maintains a high Dice score across the patient population."
+      
+    - id: "M.2"
+      title: "Jaccard Index (IoU) Performance"
+      description: "Ensure the intersection-over-union (Jaccard) index meets reliability standards."
+
+    - id: "F.1"
+      title: "Sex-based Fairness (Disparate Impact)"
+      description: "The model's success rate (Dice > 0.7) must be balanced across biological sexes."
+
+    - id: "F.2"
+      title: "Age-based Fairness (Demographic Parity)"
+      description: "The model must perform equitably across different age groups (Young, Adult, Senior)."
+
+  inventory-items:
+    # --- Performance Metrics ---
+    - uuid: "m-dice-performance"
+      description: "Mean Dice Score"
+      props:
+        - name: "metric_key"
+          value: "column_mean"
+        - name: "input:target"
+          value: "dice_score"
+        - name: "threshold"
+          value: "0.70"
+        - name: "operator"
+          value: ">"
+
+    - uuid: "m-jaccard-performance"
+      description: "Mean Jaccard Index"
+      props:
+        - name: "metric_key"
+          value: "column_mean"
+        - name: "input:target"
+          value: "jaccard_score"
+        - name: "threshold"
+          value: "0.55"
+        - name: "operator"
+          value: ">"
+
+    # --- Fairness Metrics ---
+    - uuid: "m-sex-bias"
+      description: "Disparate Impact Ratio (Sex)"
+      props:
+        - name: "metric_key"
+          value: "disparate_impact"
+        - name: "input:target"
+          value: "is_successful" # Derived column: Dice > 0.7
+        - name: "input:prediction"
+          value: "is_successful"
+        - name: "input:dimension"
+          value: "sex"
+        - name: "threshold"
+          value: "0.80"
+        - name: "operator"
+          value: ">"
+
+    - uuid: "m-age-parity"
+      description: "Demographic Parity Difference (Age)"
+      props:
+        - name: "metric_key"
+          value: "demographic_parity_diff"
+        - name: "input:target"
+          value: "is_successful"
+        - name: "input:prediction"
+          value: "is_successful"
+        - name: "input:dimension"
+          value: "age_group"
+        - name: "threshold"
+          value: "0.15"
+        - name: "operator"
+          value: "<"
+
+  control-implementations:
+    - uuid: "impl-medical-baseline"
+      source: "Venturalitica Medical Standard"
+      implemented-requirements:
+        - uuid: "req-dice"
+          control-id: "M.1"
+          links:
+            - href: "#m-dice-performance"
+              rel: "related"
+        
+        - uuid: "req-jaccard"
+          control-id: "M.2"
+          links:
+            - href: "#m-jaccard-performance"
+              rel: "related"
+
+        - uuid: "req-sex-fairness"
+          control-id: "F.1"
+          links:
+            - href: "#m-sex-bias"
+              rel: "related"
+
+        - uuid: "req-age-fairness"
+          control-id: "F.2"
+          links:
+            - href: "#m-age-parity"
+              rel: "related"
