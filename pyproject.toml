@@ -2,8 +2,21 @@
 name = "venturalitica-scenario-medical"
 version = "0.5.0"
 description = "Spine segmentation scenario: base ML vs governance-instrumented comparison"
-requires-python = ">=3.10"
-dependencies = []
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "venturalitica>=0.5.1",
+]
 
-[tool.uv]
-python-version = "3.10"
+[project.optional-dependencies]
+gpu = [
+    "monai[all]>=1.2.0",
+    "torch>=2.0.0",
+    "matplotlib>=3.7.0",
+    "scikit-image>=0.21.0",
+    "codecarbon>=2.2.0",
+]
+full = [
+    "venturalitica-scenario-medical[gpu]",
+]

@@ -11,7 +11,7 @@ This scenario demonstrates how Venturalitica wraps a clinical spine segmentation
 ```
 venturalitica-scenario-medical/
 ├── base_medical/                # Pure ML (no governance)
-│   ├── model_evaluation.py       # Core spine segmentation inference
+│   ├── model_evaluation.py        # Core spine segmentation inference
 │   ├── dicom_utils.py            # DICOM I/O and alignment utilities
 │   ├── viz_utils.py              # Clinical visualization
 │   ├── regenerate_metadata.py    # DICOM metadata extraction
@@ -47,9 +47,34 @@ venturalitica-scenario-medical/
 
 ## 🚀 Quick Start
 
-### Run Base Evaluation (Pure ML)
+### Installation
+
 ```bash
-python main.py --scenario base
+git clone https://github.com/Venturalitica/venturalitica-scenario-medical.git
+cd venturalitica-scenario-medical
+
+# Compliance audit only (no GPU required)
+uv sync
+
+# Full GPU pipeline (MONAI + PyTorch + CUDA)
+uv sync --extra gpu
+```
+
+> **Note:** Model weights (~75 MB) are stored via Git LFS. If `git clone` doesn't download them, run `git lfs pull`.
+
+### Run Compliance Audit Only (no GPU)
+```bash
+python main.py --scenario compliance
+```
+**What it does:**
+- Audits pre-computed inference results against 10 EU AI Act compliance controls
+- Wraps the audit in `vl.monitor()` (7 probes: hardware, BOM, trace, integrity, handshake)
+- Enforces OSCAL policy via `vl.enforce()`
+- Generates `compliance_report_sdk.md` + evidence vault in `.venturalitica/runs/`
+
+### Run Base Evaluation (Pure ML, GPU required)
+```bash
+python main.py --scenario base --data-path /path/to/dicom/data
 ```
 **What it does:**
 - Loads SegResNet model from MONAI bundle
@@ -63,18 +88,18 @@ python main.py --scenario base
 python main.py --scenario venturalitica
 ```
 **What it does:**
-- Runs base evaluation
-- Wraps results in `vl.enforce()` governance context
-- Applies EU AI Act compliance controls
-- Generates risk assessment and audit trails
+- Runs base evaluation wrapped in `vl.monitor()` (7 probes: hardware, carbon, BOM, trace, integrity, artifact, handshake)
+- Applies EU AI Act compliance controls via `vl.enforce()`
+- Generates compliance report + evidence vault
 
 ### Run Compliance Audit Only
 ```bash
 python main.py --scenario compliance
 ```
 **What it does:**
-- Audits evaluation results against 7 compliance controls
-- Checks demographic parity, robustness, fairness
+- Audits evaluation results against 10 compliance controls
+- Checks demographic parity, robustness, fairness, calibration, data leakage
+- Wraps audit in `vl.monitor()` for evidence collection
 - Generates compliance report
 
 ### Run Full Pipeline
@@ -82,7 +107,13 @@ python main.py --scenario compliance
 python main.py --scenario full-pipeline
 ```
 **What it does:**
-- Runs complete workflow: evaluation → governance → compliance
+- Runs complete workflow: GPU inference → governance monitoring → compliance audit
+- All wrapped in a single `vl.monitor()` session for full evidence trail
+
+### Custom Data/Model Paths
+```bash
+python main.py --scenario full-pipeline --data-path /path/to/dicom --model-path /path/to/bundle
+```
 
 ---
 
@@ -93,25 +124,33 @@ python main.py --scenario full-pipeline
 | **Core ML** | ✅ MONAI SegResNet | ✅ MONAI SegResNet + Venturalitica |
 | **DICOM Loading** | ✅ Full DICOM support | ✅ Full DICOM support |
 | **Inference** | ✅ Yes | ✅ Yes |
-| **Robustness Monitoring** | ❌ No | ✅ Yes (vl.enforce) |
-| **Compliance Checking** | ❌ No | ✅ Yes (7 EU AI Act controls) |
+| **Robustness Monitoring** | ❌ No | ✅ Yes (vl.monitor + vl.enforce) |
+| **Compliance Checking** | ❌ No | ✅ Yes (10 EU AI Act controls) |
 | **Governance Artifacts** | ❌ No | ✅ Yes (OSCAL policies) |
 | **Carbon Footprint Tracking** | ❌ No | ✅ Yes (codecarbon) |
 | **Dependencies** | 6 packages | 8 packages |
 
 ---
 
-## 🏆 Compliance Controls (7 EU AI Act Checks)
+## 🏆 Compliance Controls (10 EU AI Act Checks)
 
 The `risks.oscal.yaml` policy enforces:
 
-1. **Demographic Parity**: Minority demographic representation > 30%
-2. **Scanner Robustness**: Dice score > 0.85 across manufacturers
-3. **Small Volume Safety**: Dice > 0.75 for small anatomical structures
-4. **Lesion Robustness**: Dice > 0.80 across lesion types (>3)
-5. **Age Fairness**: Performance drop < 10% for elderly patients
-6. **Cancer Robustness**: Dice > 0.80 for top 3 cancer types
-7. **Confidence Calibration**: Correlation > 0.0 between confidence and accuracy
+**Article 10 — Data Governance:**
+1. **Demographic Parity**: Minority sex representation > 30%
+2. **Scanner Robustness**: Min Dice > 0.85 across all major manufacturers
+3. **Small Volume Safety**: Dice > 0.75 for bottom 25% volume cases
+4. **Lesion Type Robustness**: Dice > 0.80 across Lytic/Blastic phenotypes
+
+**Article 15 — Accuracy & Robustness:**
+5. **Global Accuracy**: Mean Dice > 0.85
+6. **Gender Fairness**: Male/Female performance gap < 5%
+7. **Age Fairness**: Performance drop < 10% for elderly (>70)
+8. **Cancer Robustness**: Dice > 0.80 for top 3 cancer types
+9. **Data Leakage Check**: Max single Dice < 0.99 (no train-test leakage)
+
+**Article 15 — Safety:**
+10. **Confidence Calibration**: Correlation > 0.5 between confidence and accuracy
 
 ---
 

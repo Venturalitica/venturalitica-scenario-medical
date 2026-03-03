@@ -348,43 +348,54 @@ class SpineEvaluator:
             
         return pd.DataFrame(results)
 
-def main():
-    print("🏥 DICOM Spine Segmentation - Real Model Inference (Refactored)")
+def main(model_path=None, data_path=None):
+    print("🏥 DICOM Spine Segmentation - Real Model Inference")
     print("==================================================")
-    
+
     # Locate Data
-    data_root = Path("../../../venturalitica-sdk-samples-extra/scenarios/surgery-dicom-tcia/data/dicom").resolve()
+    if data_path:
+        data_root = Path(data_path).resolve()
+    else:
+        # Default: look for DICOM data relative to scenario root
+        scenario_root = Path(__file__).parent.parent
+        data_root = (scenario_root / "shared_data" / "dicom").resolve()
+        # Fallback to legacy location
+        if not data_root.exists():
+            data_root = Path("../../../venturalitica-sdk-samples-extra/scenarios/surgery-dicom-tcia/data/dicom").resolve()
+
     if not data_root.exists():
         print(f"❌ Data root not found: {data_root}")
+        print(f"   Provide --data-path or place DICOM data in shared_data/dicom/")
         return
+
+    # Override model directory if provided
+    if model_path:
+        global MODEL_DIR
+        MODEL_DIR = Path(model_path).parent
 
     # Scan Metadata
     patients = []
-    target_pid = "15094" # Focused Verification
-    
+
     for p_dir in data_root.iterdir():
         if p_dir.is_dir():
             pid = p_dir.name
-                
+
             # Gather all DICOMs for this patient (simplistic)
             files = sorted(list(p_dir.rglob("*.dcm")))
             input_files = [f for f in files if "SEG" not in str(f).upper() and "seg" not in str(f).lower()]
-            
+
             if input_files:
                 patients.append({
                     "PatientID": p_dir.name,
                     "FilePaths": input_files
                 })
-                
+
     df = pd.DataFrame(patients)
     print(f"✅ Loaded {len(df)} patients from metadata.")
-    
-    # Run
+
     evaluator = SpineEvaluator()
-    # Run
-    evaluator = SpineEvaluator()
-    results_df = evaluator.evaluate_cohort(df, limit=None) 
-    
+    results_df = evaluator.evaluate_cohort(df, limit=None)
+
     # Save
     results_df.to_csv("cohort_results.csv", index=False)
     print("\n✅ Cohort Processing Complete. Results saved to cohort_results.csv")

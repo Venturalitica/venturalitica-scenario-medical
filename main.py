@@ -29,6 +29,10 @@ def main():
         "--model-path",
         help="Path to MONAI model bundle",
     )
+    parser.add_argument(
+        "--data-path",
+        help="Path to DICOM data directory",
+    )
 
     args = parser.parse_args()
 
@@ -42,50 +46,61 @@ def main():
     model_path = args.model_path or str(
         shared_path / "models" / "wholeBody_ct_segmentation"
     )
+    data_path = args.data_path
 
     if args.scenario == "base":
         sys.path.insert(0, str(base_path))
         from model_evaluation import main as base_main
 
         print("=" * 60)
-        print("Running Base Evaluation (Pure ML, No Governance)")
+        print("  Running Base Evaluation (Pure ML, No Governance)")
         print("=" * 60)
-        base_main(model_path=model_path)
+        base_main(model_path=model_path, data_path=data_path)
 
     elif args.scenario == "venturalitica":
         sys.path.insert(0, str(vl_path))
         sys.path.insert(0, str(base_path))
+        import venturalitica
         from model_evaluation import main as base_main
 
         print("=" * 60)
-        print("Running Venturalitica Pipeline (With Governance)")
+        print("  Running Venturalitica Pipeline (With Governance)")
         print("=" * 60)
-        base_main(model_path=model_path)
+        with venturalitica.monitor(
+            name="Spine-Mets GPU Inference",
+            label="Medical Device AI - EU AI Act Art. 6(1)",
+        ):
+            base_main(model_path=model_path, data_path=data_path)
+
+        # Run compliance audit after inference
+        from compliance_suite import run_compliance_suite
+        run_compliance_suite()
 
     elif args.scenario == "compliance":
         sys.path.insert(0, str(vl_path))
-        from compliance_suite import main as compliance_main
+        from compliance_suite import run_compliance_suite
 
-        print("=" * 60)
-        print("Running Compliance Audit")
-        print("=" * 60)
-        compliance_main()
+        run_compliance_suite()
 
     elif args.scenario == "full-pipeline":
         sys.path.insert(0, str(vl_path))
         sys.path.insert(0, str(base_path))
-        print("=" * 60)
-        print("Running Full Pipeline: Evaluation + Compliance")
-        print("=" * 60)
+        import venturalitica
         from model_evaluation import main as base_main
 
-        base_main(model_path=model_path)
-        print("\n" + "=" * 60)
-        print("Compliance Audit")
         print("=" * 60)
-        from compliance_suite import main as compliance_main
+        print("  Running Full Pipeline: Evaluation + Compliance")
+        print("=" * 60)
 
-        compliance_main()
+        with venturalitica.monitor(
+            name="Spine-Mets Full Pipeline",
+            label="Medical Device AI - EU AI Act Art. 6(1)",
+        ):
+            base_main(model_path=model_path, data_path=data_path)
+
+            print("\n" + "=" * 60)
+            from compliance_suite import run_compliance_suite
+            run_compliance_suite()
 
 
 if __name__ == "__main__":

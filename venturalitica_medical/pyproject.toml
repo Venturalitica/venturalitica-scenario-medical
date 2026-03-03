@@ -2,7 +2,7 @@
 name = "venturalitica-medical"
 version = "0.5.0"
 description = "Spine segmentation with governance compliance and bias monitoring"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "monai[all]>=1.2.0",
     "torch>=2.0.0",
@@ -10,9 +10,6 @@ dependencies = [
     "pandas>=2.0.0",
     "matplotlib>=3.7.0",
     "scikit-image>=0.21.0",
-    "venturalitica>=0.5.0",
+    "venturalitica>=0.5.1",
     "codecarbon>=2.2.0",
 ]
-
-[tool.uv]
-python-version = "3.10"
