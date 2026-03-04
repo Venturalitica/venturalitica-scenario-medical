@@ -1,0 +1,81 @@
+assessment-plan:
+  metadata:
+    title: "EU AI Act Art. 10 — Data Governance (Spine Segmentation)"
+    version: "2.0.0"
+    oscal-version: "1.0.0"
+
+  reviewed-controls:
+    control-implementations:
+      - description: "Article 10: Fairness & Representativeness"
+        implemented-requirements:
+          - control-id: fairness-sex-disparate-impact
+            description: "Disparate impact ratio across biological sex must exceed 0.80 (four-fifths rule)"
+            props:
+              - name: severity
+                value: high
+              - name: metric_key
+                value: disparate_impact
+              - name: threshold
+                value: "0.80"
+              - name: operator
+                value: gt
+              - name: "input:target"
+                value: "is_successful"
+              - name: "input:prediction"
+                value: "is_successful"
+              - name: "input:dimension"
+                value: "Sex"
+              - name: article
+                value: "10"
+
+          - control-id: fairness-age-demographic-parity
+            description: "Demographic parity difference across age groups must be below 0.15"
+            props:
+              - name: severity
+                value: high
+              - name: metric_key
+                value: demographic_parity_diff
+              - name: threshold
+                value: "0.15"
+              - name: operator
+                value: lt
+              - name: "input:target"
+                value: "is_successful"
+              - name: "input:prediction"
+                value: "is_successful"
+              - name: "input:dimension"
+                value: "age_group"
+              - name: article
+                value: "10"
+
+      - description: "Article 10: Privacy & Data Quality"
+        implemented-requirements:
+          - control-id: privacy-k-anonymity
+            description: "Patient quasi-identifiers must satisfy k >= 3 anonymity"
+            props:
+              - name: severity
+                value: high
+              - name: metric_key
+                value: k_anonymity
+              - name: threshold
+                value: "3"
+              - name: operator
+                value: gte
+              - name: quasi_identifiers
+                value: "Age,Sex,Manufacturer"
+              - name: article
+                value: "10"
+
+          - control-id: data-quality-completeness
+            description: "Dataset completeness across all columns must exceed 90%"
+            props:
+              - name: severity
+                value: medium
+              - name: metric_key
+                value: data_completeness
+              - name: threshold
+                value: "0.90"
+              - name: operator
+                value: gte
+              - name: article
+                value: "10"

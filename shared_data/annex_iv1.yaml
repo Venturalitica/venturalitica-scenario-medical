@@ -1,0 +1,63 @@
+# Annex IV.1 — System Description (EU AI Act)
+# Provider: NovaMed Robotics | System: SpineGuard AI v1.0
+# Loaded by compliance_suite.py → venturalitica.models.SystemDescription
+
+name: "SpineGuard AI"
+version: "1.0.0"
+provider_name: "NovaMed Robotics GmbH"
+
+intended_purpose: >
+  AI-assisted surgical planning for spinal metastasis segmentation in
+  pre-operative CT scans. Classified as MDR Class IIa+ medical device
+  under EU AI Act Art. 6(1) high-risk category (Annex I, Section A).
+  Intended for use by board-certified radiologists and spine surgeons
+  to delineate vertebral metastases for radiation therapy planning.
+
+potential_misuses: >
+  NOT intended for: (1) standalone diagnosis without radiologist review,
+  (2) pediatric patients under 18 years, (3) non-CT imaging modalities
+  (MRI, X-ray, PET), (4) emergency triage or real-time intraoperative
+  guidance, (5) automated treatment decisions without clinician oversight.
+
+instructions_for_use: >
+  Input: DICOM CT volumes (axial, >= 1mm slice thickness, soft-tissue kernel).
+  Output: 3D vertebral segmentation mask (NIfTI) with per-vertebra labels.
+  Workflow: PACS export -> SpineGuard AI -> radiologist review -> surgical plan.
+  Radiologist must verify all segmentation boundaries before clinical use.
+  Developed per IEC 62304 (software lifecycle) and IEC 82304-1 (health software).
+
+hardware_description: >
+  Requires NVIDIA CUDA-capable GPU with >= 8 GB VRAM. Validated on:
+  NVIDIA A100 (data center), RTX 4090 (workstation), T4 (cloud inference).
+  Minimum host RAM: 16 GB. Storage: 2 GB for model weights + DICOM staging.
+  Network: DICOM receiver on port 11112 (TLS 1.3 required for PHI transfer).
+
+interaction_description: >
+  Integrates with hospital PACS via DICOM C-STORE SCP. Receives CT volumes,
+  processes through SegResNet (3D, 105-channel) sliding-window inference,
+  returns segmentation as DICOM SEG or RT Structure Set. No direct patient
+  interaction — operates as a backend service within the clinical IT environment.
+
+software_dependencies: >
+  Runtime: Python 3.11+, PyTorch 2.2, MONAI 1.3, CUDA 12.1.
+  Model: SegResNet (spatial_dims=3, in_channels=1, out_channels=105).
+  Inference: Sliding window (96x96x96 patches, 0.25 overlap, Gaussian blending).
+  DICOM: pydicom 2.4, highdicom 0.22. Orchestration: Venturalitica SDK 0.5.
+
+market_placement_form: >
+  On-premises deployment as Docker container within hospital DMZ.
+  No cloud processing of patient data. Model weights shipped via
+  signed OCI image. Licensing: per-site annual subscription.
+
+external_features: >
+  Web-based review UI for radiologists (OHIF Viewer integration).
+  Visual overlay of segmentation contours on axial/sagittal/coronal views.
+  Color-coded vertebral labels (L5-C1) with confidence heatmap.
+  PDF export of segmentation report with measurement annotations.
+
+ui_description: >
+  Radiologist dashboard: case list with AI status indicators (pending,
+  complete, review required). 3D volume rendering with adjustable opacity.
+  Slice-by-slice navigation with segmentation overlay toggle. Edit tools
+  for manual correction of AI-generated contours. Audit trail of all
+  modifications with timestamp and user identity.

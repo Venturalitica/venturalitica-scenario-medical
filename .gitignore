@@ -43,6 +43,10 @@ shared_data/cohort_results.csv
 shared_data/trusted_metadata.csv
 .venturalitica/
 compliance_report_sdk.md
+# Dashboard-staged copies (canonical sources live in shared_data/)
+/system_description.yaml
+/data_policy.oscal.yaml
+/model_policy.oscal.yaml
 compliance_plots/
 debug_outputs/
 uv.lock
