@@ -36,3 +36,11 @@ env/
 *.mha
 cache/
 logs/
+shared_data/dicom/
+shared_data/.progress/
+shared_data/clinical_metadata.csv
+.venturalitica/
+compliance_report_sdk.md
+compliance_plots/
+debug_outputs/
+uv.lock
