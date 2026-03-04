@@ -188,7 +188,16 @@ def main():
         else:
             print("\n  Fetching patient list from TCIA...")
             client = NBIAClient()
-            patient_ids = with_retries(client.getPatients, Collection=COLLECTION)
+            raw_patients = with_retries(client.getPatients, Collection=COLLECTION)
+            # NBIAClient returns dicts like {"PatientId": "10543", ...} — extract IDs
+            patient_ids = []
+            for p in raw_patients:
+                if isinstance(p, dict):
+                    pid = p.get("PatientId") or p.get("PatientID") or p.get("patientId")
+                    if pid:
+                        patient_ids.append(str(pid))
+                else:
+                    patient_ids.append(str(p))
             print(f"  Found {len(patient_ids)} patients in collection")
 
         if args.limit:
