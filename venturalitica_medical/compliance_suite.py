@@ -8,164 +8,227 @@ import venturalitica
 SCENARIO_ROOT = Path(__file__).parent.parent
 SHARED_DATA = SCENARIO_ROOT / "shared_data"
 
+# EU AI Act High-Risk: if you can't prove compliance, you FAIL.
+# No silent defaults. No fake passes. Every metric must be real.
+INSUFFICIENT = "INSUFFICIENT_DATA"
+
+
+def load_clinical_metadata() -> pd.DataFrame | None:
+    """Load clinical metadata downloaded from TCIA."""
+    clinical_path = SHARED_DATA / "clinical_metadata.csv"
+    if not clinical_path.exists():
+        return None
+
+    raw = pd.read_csv(clinical_path)
+
+    # TCIA Excel has definition rows before data — find first numeric Case
+    first_data_idx = None
+    for i, val in enumerate(raw["Case"]):
+        try:
+            int(float(val))
+            first_data_idx = i
+            break
+        except (ValueError, TypeError):
+            continue
+
+    if first_data_idx is None:
+        return None
+
+    df = raw.iloc[first_data_idx:].copy()
+    df["PatientID"] = df["Case"].astype(float).astype(int).astype(str)
+    return df
+
 
 def run_compliance_suite():
     print("=" * 60)
-    print("  Venturalitica Compliance Audit Suite (EU AI Act)")
+    print("  Venturalitica Compliance Audit — EU AI Act (High-Risk)")
     print("=" * 60)
 
-    # 1. Load Data
+    # ── 1. Load inference results ──
     results_path = SHARED_DATA / "cohort_results.csv"
     if not results_path.exists():
-        print(f"  Results file not found: {results_path}")
-        print(f"  Run --scenario base first to generate inference results.")
+        print(f"\n  ERROR: No inference results found at {results_path}")
+        print(f"  Run inference first: python main.py --scenario venturalitica --data-path shared_data/dicom")
         return
     results_df = pd.read_csv(results_path)
+    results_df["PatientID"] = results_df["PatientID"].astype(str)
+    n_patients = len(results_df)
 
-    # Load Trusted Metadata (Generated from DICOMs)
+    # ── 2. Load trusted DICOM metadata ──
     trusted_path = SHARED_DATA / "trusted_metadata.csv"
     if trusted_path.exists():
         trusted_df = pd.read_csv(trusted_path)
         trusted_df["PatientID"] = trusted_df["PatientID"].astype(str)
-        merged_df = results_df.astype({"PatientID": str}).merge(
-            trusted_df, on="PatientID", how="left"
-        )
+        merged_df = results_df.merge(trusted_df, on="PatientID", how="left")
     else:
-        print(f"  Trusted metadata not found at {trusted_path}.")
-        merged_df = results_df.astype({"PatientID": str})
+        print(f"\n  WARNING: No DICOM metadata at {trusted_path}")
+        print(f"  Demographic and scanner controls will FAIL (no data to prove compliance).")
+        merged_df = results_df
 
-    # Load Clinical Metadata (optional — cancer type data)
-    clinical_metadata_path = (
-        SCENARIO_ROOT.parent
-        / "venturalitica-sdk-samples-extra"
-        / "scenarios"
-        / "surgery-dicom-tcia"
-        / "data"
-        / "combined_metadata.csv"
-    )
-    if clinical_metadata_path.exists():
-        meta_df = pd.read_csv(clinical_metadata_path)
-        meta_df["PatientID"] = (
-            pd.to_numeric(meta_df["Case"], errors="coerce")
-            .fillna(0)
-            .astype(int)
-            .astype(str)
-        )
+    # ── 3. Load clinical metadata from TCIA ──
+    clinical_df = load_clinical_metadata()
+    if clinical_df is not None:
         clinical_cols = ["PatientID", "Primary cancer", "Lytic", "Blastic", "Mixed"]
-        available_cols = [c for c in clinical_cols if c in meta_df.columns]
-        merged_df = merged_df.merge(meta_df[available_cols], on="PatientID", how="left")
+        available_cols = [c for c in clinical_cols if c in clinical_df.columns]
+        merged_df = merged_df.merge(clinical_df[available_cols], on="PatientID", how="left")
+        print(f"  Clinical metadata loaded ({len(clinical_df)} patients).")
     else:
-        print(f"  Clinical metadata not found (optional). Skipping cancer-type metrics.")
+        print(f"  WARNING: No clinical metadata. Cancer/lesion controls will FAIL.")
 
-    # Drop rows with NaN Dice (patients without ground truth)
-    valid_df = merged_df.dropna(subset=["Dice"])
-    print(f"  Loaded {len(merged_df)} records ({len(valid_df)} with valid Dice scores).")
+    # Drop rows without Dice (no ground truth)
+    valid_df = merged_df.dropna(subset=["Dice"]).copy()
+    n_valid = len(valid_df)
+    print(f"  Cohort: {n_patients} patients | {n_valid} with Dice scores.")
 
-    # 2. Compute Custom Metrics
-    print("\n  Pre-computing audit metrics...")
+    if n_valid == 0:
+        print("\n  FATAL: No valid Dice scores. Cannot audit.")
+        return
+
+    # ── 4. Compute metrics — NO DEFAULTS, real values only ──
+    print("\n  Computing audit metrics from real data...")
     audit_metrics = {}
+    warnings = []
 
-    # Sex Stats
+    # Global Dice (always computable if we have valid data)
+    global_dice = float(valid_df["Dice"].mean())
+    audit_metrics["global_dice"] = global_dice
+    audit_metrics["max_single_dice"] = float(valid_df["Dice"].max())
+
+    # ── Demographic Parity (Art. 10) ──
     sex_col = "Sex" if "Sex" in valid_df.columns else None
-    if sex_col:
+    if sex_col and valid_df[sex_col].dropna().nunique() >= 2:
         sex_dist = valid_df[sex_col].dropna().value_counts(normalize=True)
-        audit_metrics["minority_sex_prop"] = float(sex_dist.min()) if len(sex_dist) > 1 else 0.0
+        audit_metrics["minority_sex_prop"] = float(sex_dist.min())
+    elif sex_col and valid_df[sex_col].dropna().nunique() == 1:
+        # Only one sex in cohort — that's a real demographic failure
+        audit_metrics["minority_sex_prop"] = 0.0
+        warnings.append(f"  Only {valid_df[sex_col].dropna().iloc[0]} patients — zero minority representation")
     else:
         audit_metrics["minority_sex_prop"] = 0.0
+        warnings.append("  No sex data available — cannot prove demographic parity")
 
-    # Global Dice
-    global_dice = valid_df["Dice"].mean()
-    audit_metrics["global_dice"] = global_dice
-    audit_metrics["max_single_dice"] = valid_df["Dice"].max()
-
-    # Gender Gap
-    if sex_col and sex_col in valid_df.columns:
+    # ── Gender Gap (Art. 15) ──
+    if sex_col and valid_df[sex_col].dropna().nunique() >= 2:
         male_dice = valid_df[valid_df[sex_col] == "M"]["Dice"].mean()
         female_dice = valid_df[valid_df[sex_col] == "F"]["Dice"].mean()
-        if not pd.isna(male_dice) and not pd.isna(female_dice):
-            audit_metrics["gender_gap"] = abs(male_dice - female_dice)
-        else:
-            audit_metrics["gender_gap"] = 0.0
+        audit_metrics["gender_gap"] = float(abs(male_dice - female_dice))
     else:
-        audit_metrics["gender_gap"] = 0.0
+        # Can't prove fairness → worst case (max gap)
+        audit_metrics["gender_gap"] = 1.0
+        warnings.append("  Cannot compute gender gap — insufficient sex diversity")
 
-    # Scanner Bias
-    if "Manufacturer" in valid_df.columns:
-        manufacturers = valid_df["Manufacturer"].value_counts()
-        valid_mfrs = manufacturers[manufacturers > 5].index
-        min_scanner_dice = 1.0
-        for mfr in valid_mfrs:
+    # ── Scanner Robustness (Art. 15) ──
+    if "Manufacturer" in valid_df.columns and valid_df["Manufacturer"].dropna().nunique() >= 1:
+        mfr_counts = valid_df["Manufacturer"].dropna().value_counts()
+        # Use any manufacturer with at least 1 patient (real data, not thresholded away)
+        min_scanner_dice = float("inf")
+        for mfr in mfr_counts.index:
             d = valid_df[valid_df["Manufacturer"] == mfr]["Dice"].mean()
             if d < min_scanner_dice:
-                min_scanner_dice = d
+                min_scanner_dice = float(d)
         audit_metrics["min_scanner_dice"] = min_scanner_dice
+        n_mfrs = len(mfr_counts)
+        if n_mfrs == 1:
+            warnings.append(f"  Only 1 scanner manufacturer ({mfr_counts.index[0]}) — no cross-scanner validation")
     else:
-        audit_metrics["min_scanner_dice"] = 1.0
+        audit_metrics["min_scanner_dice"] = 0.0
+        warnings.append("  No scanner manufacturer data — cannot prove scanner robustness")
 
-    # Small Volume Safety (Bottom 25% volume)
-    if "SpineVol" in valid_df.columns:
+    # ── Small Volume Safety (Art. 15) ──
+    if "SpineVol" in valid_df.columns and n_valid >= 4:
         vol_q1 = valid_df["SpineVol"].quantile(0.25)
-        small_vol_dice = valid_df[valid_df["SpineVol"] < vol_q1]["Dice"].mean()
-        audit_metrics["small_vol_dice"] = small_vol_dice if not pd.isna(small_vol_dice) else 1.0
+        small_subset = valid_df[valid_df["SpineVol"] <= vol_q1]
+        if len(small_subset) > 0:
+            audit_metrics["small_vol_dice"] = float(small_subset["Dice"].mean())
+        else:
+            audit_metrics["small_vol_dice"] = 0.0
+    elif "SpineVol" in valid_df.columns and n_valid < 4:
+        # Too few patients for quartile — use the worst individual score
+        audit_metrics["small_vol_dice"] = float(valid_df["Dice"].min())
+        warnings.append(f"  Only {n_valid} patients — using worst-case Dice for small volume safety")
     else:
-        audit_metrics["small_vol_dice"] = 1.0
+        audit_metrics["small_vol_dice"] = 0.0
+        warnings.append("  No volume data — cannot prove small volume safety")
 
-    # Lesion Type Robustness
-    min_lesion_dice = 1.0
-    for ltype in ["Lytic", "Blastic"]:
+    # ── Lesion Type Robustness (Art. 15) ──
+    lesion_computed = False
+    min_lesion_dice = float("inf")
+    for ltype in ["Lytic", "Blastic", "Mixed"]:
         if ltype in valid_df.columns and valid_df[ltype].notna().any():
             subset = valid_df[valid_df[ltype].notna()]
-            if len(subset) > 3:
-                d = subset["Dice"].mean()
+            if len(subset) >= 1:
+                d = float(subset["Dice"].mean())
                 if d < min_lesion_dice:
                     min_lesion_dice = d
-    audit_metrics["min_lesion_type_dice"] = min_lesion_dice
-
-    # Age Bias
-    age_col = "Age" if "Age" in valid_df.columns else None
-    if age_col:
-        bins = [0, 50, 70, 100]
-        labels = ["<50", "50-70", ">70"]
-        valid_df = valid_df.copy()
-        valid_df["AgeGroup"] = pd.cut(valid_df[age_col], bins=bins, labels=labels)
-        elderly_dice = valid_df[valid_df["AgeGroup"] == ">70"]["Dice"].mean()
-        if pd.isna(elderly_dice) or global_dice == 0:
-            audit_metrics["age_bias"] = 0.0
-        else:
-            audit_metrics["age_bias"] = (global_dice - elderly_dice) / global_dice
+                lesion_computed = True
+    if lesion_computed:
+        audit_metrics["min_lesion_type_dice"] = min_lesion_dice
     else:
-        audit_metrics["age_bias"] = 0.0
+        audit_metrics["min_lesion_type_dice"] = 0.0
+        warnings.append("  No lesion type annotations — cannot prove lesion robustness")
 
-    # Cancer Robustness
+    # ── Age Bias (Art. 15) ──
+    age_col = "Age" if "Age" in valid_df.columns else None
+    if age_col and valid_df[age_col].dropna().any():
+        valid_df["AgeGroup"] = pd.cut(
+            valid_df[age_col].astype(float),
+            bins=[0, 50, 70, 120],
+            labels=["<50", "50-70", ">70"],
+        )
+        elderly = valid_df[valid_df["AgeGroup"] == ">70"]
+        non_elderly = valid_df[valid_df["AgeGroup"] != ">70"]
+        if len(elderly) >= 1 and len(non_elderly) >= 1 and global_dice > 0:
+            elderly_dice = float(elderly["Dice"].mean())
+            audit_metrics["age_bias"] = float((global_dice - elderly_dice) / global_dice)
+        elif len(elderly) == 0:
+            audit_metrics["age_bias"] = 1.0
+            warnings.append("  No elderly (>70) patients in cohort — cannot prove age fairness")
+        else:
+            audit_metrics["age_bias"] = 1.0
+            n_age = len(valid_df[age_col].dropna())
+            warnings.append(f"  Only {n_age} patient(s) with age data — need both elderly and non-elderly to compute bias")
+    else:
+        audit_metrics["age_bias"] = 1.0
+        warnings.append("  No age data in DICOM metadata — cannot prove age fairness")
+
+    # ── Cancer Robustness (Art. 15) ──
     if "Primary cancer" in valid_df.columns and valid_df["Primary cancer"].notna().any():
-        top_cancers = valid_df["Primary cancer"].value_counts().nlargest(3).index
-        min_c_dice = 1.0
+        top_cancers = valid_df["Primary cancer"].dropna().value_counts().nlargest(3).index
+        min_c_dice = float("inf")
         for cancer in top_cancers:
             c_dice = valid_df[valid_df["Primary cancer"] == cancer]["Dice"].mean()
             if not np.isnan(c_dice) and c_dice < min_c_dice:
-                min_c_dice = c_dice
-        audit_metrics["min_cancer_dice"] = min_c_dice
+                min_c_dice = float(c_dice)
+        audit_metrics["min_cancer_dice"] = min_c_dice if min_c_dice < float("inf") else 0.0
     else:
-        audit_metrics["min_cancer_dice"] = 1.0
+        audit_metrics["min_cancer_dice"] = 0.0
+        warnings.append("  No cancer type data — cannot prove cancer robustness")
 
-    # Calibration
-    corr = valid_df["Confidence"].corr(valid_df["Dice"])
-    audit_metrics["confidence_correlation"] = corr if not pd.isna(corr) else 0.0
+    # ── Confidence Calibration (Art. 15) ──
+    if n_valid >= 3:
+        corr = valid_df["Confidence"].corr(valid_df["Dice"])
+        audit_metrics["confidence_correlation"] = float(corr) if not pd.isna(corr) else 0.0
+    else:
+        audit_metrics["confidence_correlation"] = 0.0
+        warnings.append(f"  Only {n_valid} patients — insufficient for correlation analysis")
 
-    # Cast to python float
-    audit_metrics = {k: float(v) for k, v in audit_metrics.items()}
-
+    # Print computed metrics
     print()
     for k, v in audit_metrics.items():
         print(f"    {k}: {v:.4f}")
 
-    # 3. Enforce Compliance with monitoring
+    if warnings:
+        print(f"\n  Data gaps detected ({len(warnings)}):")
+        for w in warnings:
+            print(f"    {w}")
+
+    # ── 5. Enforce compliance ──
     policy_path = str(SHARED_DATA / "policies" / "risks.oscal.yaml")
-    print(f"\n  Enforcing policy: {policy_path}")
+    print(f"\n  Enforcing OSCAL policy: {Path(policy_path).name}")
 
     with venturalitica.monitor(
         name="Spine-Mets Compliance Audit",
-        label="EU AI Act Medical Device",
+        label="EU AI Act Medical Device — High Risk (Art. 6.1)",
     ):
         compliance_results = venturalitica.enforce(
             metrics=audit_metrics,
@@ -176,9 +239,9 @@ def run_compliance_suite():
         print("  No compliance results returned. Check policy file.")
         return
 
-    # 4. Print Results
+    # ── 6. Print results ──
     print("\n" + "=" * 60)
-    print("  AUDIT RESULTS")
+    print("  EU AI ACT COMPLIANCE AUDIT — RESULTS")
     print("=" * 60)
 
     passed_count = sum(1 for r in compliance_results if r.passed)
@@ -195,18 +258,31 @@ def run_compliance_suite():
 
     print(f"\n  Summary: {passed_count} passed / {failed_count} failed out of {len(compliance_results)} controls")
 
-    # 5. Generate Markdown Report
+    if failed_count > 0:
+        print(f"\n  This model CANNOT be deployed under EU AI Act without addressing {failed_count} violations.")
+    else:
+        print(f"\n  All controls passed. Model is compliant for deployment.")
+
+    # ── 7. Generate report ──
     report_path = SCENARIO_ROOT / "compliance_report_sdk.md"
     with open(report_path, "w") as f:
         f.write("# Venturalitica Compliance Audit Report\n\n")
-        f.write("Generated via `venturalitica.enforce(policy='risks.oscal.yaml')`\n\n")
+        f.write(f"**Policy:** `risks.oscal.yaml` | **Cohort:** {n_patients} patients ({n_valid} with GT)\n\n")
+        f.write(f"Generated via `venturalitica.enforce()` | SDK v{venturalitica.__version__}\n\n")
 
         f.write("## Executive Summary\n\n")
-        overall = "PASS" if failed_count == 0 else "FAIL"
+        overall = "COMPLIANT" if failed_count == 0 else "NON-COMPLIANT"
         f.write(f"- **Overall Status**: {overall}\n")
         f.write(f"- **Controls Checked**: {len(compliance_results)}\n")
         f.write(f"- **Passed**: {passed_count}\n")
         f.write(f"- **Failed**: {failed_count}\n\n")
+
+        if warnings:
+            f.write("## Data Gaps\n\n")
+            f.write("The following metrics could not be fully evaluated due to insufficient cohort data:\n\n")
+            for w in warnings:
+                f.write(f"- {w.strip()}\n")
+            f.write("\n")
 
         f.write("## Detailed Findings\n\n")
         for check in compliance_results:
