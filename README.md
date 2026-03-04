@@ -1,259 +1,160 @@
-# 🏥 Medical Spine Segmentation Scenario
+# Medical Spine Segmentation Scenario
 
-**Venturalitica v0.5.0** — Before & After: Pure ML vs Governance-Instrumented
+**Venturalitica SDK v0.5.1** — Before & After: Pure ML vs Governance-Instrumented
 
-This scenario demonstrates how Venturalitica wraps a clinical spine segmentation system with governance controls, robustness monitoring, and compliance validation against EU AI Act requirements.
-
----
-
-## 📁 Structure
-
-```
-venturalitica-scenario-medical/
-├── base_medical/                # Pure ML (no governance)
-│   ├── model_evaluation.py        # Core spine segmentation inference
-│   ├── dicom_utils.py            # DICOM I/O and alignment utilities
-│   ├── viz_utils.py              # Clinical visualization
-│   ├── regenerate_metadata.py    # DICOM metadata extraction
-│   ├── generate_audit_plots.py   # Audit visualization
-│   └── pyproject.toml            # ML dependencies only
-│
-├── venturalitica_medical/        # Governance-instrumented version
-│   ├── compliance_suite.py       # Compliance audit with vl.enforce()
-│   └── pyproject.toml            # ML + Venturalitica SDK + codecarbon
-│
-├── shared_data/                  # Shared assets
-│   ├── models/
-│   │   └── wholeBody_ct_segmentation/  # MONAI SegResNet bundle (105 classes)
-│   ├── policies/
-│   │   ├── risks.oscal.yaml      # EU AI Act compliance controls
-│   │   └── medical/
-│   │       └── fairness.oscal.yaml
-│   ├── trusted_metadata.csv      # Reference DICOM metadata
-│   └── cohort_results.csv        # Inference benchmark results
-│
-├── debug/                        # Development & troubleshooting
-│   ├── debug_mask_alignment.py   # DICOM segmentation validation
-│   ├── debug_loaders.py          # Data loader comparison
-│   ├── test_bundle.py            # MONAI bundle verification
-│   └── inspect_dicom_alignment.py # Z-axis alignment checks
-│
-├── main.py                       # CLI orchestrator
-├── pyproject.toml                # Root project config
-└── README.md                     # This file
-```
+End-to-end demo: download real DICOM data from TCIA, run GPU inference with MONAI SegResNet, then audit compliance against EU AI Act controls using `venturalitica.enforce()`.
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
-### Installation
+### 1. Clone & Install
 
 ```bash
 git clone https://github.com/Venturalitica/venturalitica-scenario-medical.git
 cd venturalitica-scenario-medical
 
-# Compliance audit only (no GPU required)
-uv sync
-
-# Full GPU pipeline (MONAI + PyTorch + CUDA)
+# Full GPU pipeline (MONAI + PyTorch + CUDA + Venturalitica SDK)
 uv sync --extra gpu
 ```
 
-> **Note:** Model weights (~75 MB) are stored via Git LFS. If `git clone` doesn't download them, run `git lfs pull`.
+> Model weights (~75 MB) are stored via Git LFS. Run `git lfs pull` if weights are missing.
 
-### Run Compliance Audit Only (no GPU)
+### 2. Download DICOM Data from TCIA
+
 ```bash
-python main.py --scenario compliance
+# Download 1 patient (~800 files, ~1 min)
+uv run download_data.py --patients 10543 --skip-clinical
+
+# Download 5 patients for a broader cohort
+uv run download_data.py --limit 5
+
+# Download all patients (~50 GB)
+uv run download_data.py
 ```
-**What it does:**
-- Audits pre-computed inference results against 10 EU AI Act compliance controls
-- Wraps the audit in `vl.monitor()` (7 probes: hardware, BOM, trace, integrity, handshake)
-- Enforces OSCAL policy via `vl.enforce()`
-- Generates `compliance_report_sdk.md` + evidence vault in `.venturalitica/runs/`
 
-### Run Base Evaluation (Pure ML, GPU required)
+Data is saved to `shared_data/dicom/`. Downloads are resumable.
+
+### 3. Run GPU Inference + Compliance Audit
+
 ```bash
-python main.py --scenario base --data-path /path/to/dicom/data
+# Full pipeline: inference + governance monitoring + compliance audit
+python main.py --scenario venturalitica --data-path shared_data/dicom
 ```
-**What it does:**
-- Loads SegResNet model from MONAI bundle
-- Loads CT and segmentation DICOM files
-- Runs inference on test cohort
-- Computes Dice scores and confidence metrics
-- No governance, no compliance checks
 
-### Run with Governance (Venturalitica)
-```bash
-python main.py --scenario venturalitica
+This runs:
+1. MONAI SegResNet inference on the downloaded DICOM volumes (GPU)
+2. `vl.monitor()` — 7 governance probes (hardware, carbon, BOM, trace, integrity, artifact, handshake)
+3. DICOM metadata extraction (demographics, scanner parameters)
+4. `vl.enforce()` — 10 EU AI Act compliance controls
+5. Evidence vault at `.venturalitica/runs/`
+
+### 4. Inspect Results
+
+After the pipeline completes:
+
 ```
-**What it does:**
-- Runs base evaluation wrapped in `vl.monitor()` (7 probes: hardware, carbon, BOM, trace, integrity, artifact, handshake)
-- Applies EU AI Act compliance controls via `vl.enforce()`
-- Generates compliance report + evidence vault
+shared_data/
+├── cohort_results.csv          # Inference metrics (generated)
+├── trusted_metadata.csv        # DICOM metadata (generated)
+└── dicom/                      # Downloaded DICOM data
 
-### Run Compliance Audit Only
-```bash
-python main.py --scenario compliance
-```
-**What it does:**
-- Audits evaluation results against 10 compliance controls
-- Checks demographic parity, robustness, fairness, calibration, data leakage
-- Wraps audit in `vl.monitor()` for evidence collection
-- Generates compliance report
-
-### Run Full Pipeline
-```bash
-python main.py --scenario full-pipeline
-```
-**What it does:**
-- Runs complete workflow: GPU inference → governance monitoring → compliance audit
-- All wrapped in a single `vl.monitor()` session for full evidence trail
-
-### Custom Data/Model Paths
-```bash
-python main.py --scenario full-pipeline --data-path /path/to/dicom --model-path /path/to/bundle
+compliance_report_sdk.md        # Compliance audit report (generated)
+.venturalitica/runs/            # Evidence vault (generated)
 ```
 
 ---
 
-## 📊 Comparison: Base vs Venturalitica
+## Alternative Scenarios
 
-| Feature | Base | Venturalitica |
-|---------|------|---------------|
-| **Core ML** | ✅ MONAI SegResNet | ✅ MONAI SegResNet + Venturalitica |
-| **DICOM Loading** | ✅ Full DICOM support | ✅ Full DICOM support |
-| **Inference** | ✅ Yes | ✅ Yes |
-| **Robustness Monitoring** | ❌ No | ✅ Yes (vl.monitor + vl.enforce) |
-| **Compliance Checking** | ❌ No | ✅ Yes (10 EU AI Act controls) |
-| **Governance Artifacts** | ❌ No | ✅ Yes (OSCAL policies) |
-| **Carbon Footprint Tracking** | ❌ No | ✅ Yes (codecarbon) |
-| **Dependencies** | 6 packages | 8 packages |
+### Base Evaluation (Pure ML, no governance)
+```bash
+python main.py --scenario base --data-path shared_data/dicom
+```
+
+### Compliance Audit Only (after inference has run)
+```bash
+python main.py --scenario compliance
+```
+
+### Full Pipeline (inference + compliance in single monitor session)
+```bash
+python main.py --scenario full-pipeline --data-path shared_data/dicom
+```
 
 ---
 
-## 🏆 Compliance Controls (10 EU AI Act Checks)
+## Project Structure
+
+```
+venturalitica-scenario-medical/
+├── main.py                       # CLI orchestrator
+├── download_data.py              # TCIA DICOM downloader (PEP 723)
+├── pyproject.toml                # Root project config
+│
+├── base_medical/                 # Pure ML (no governance)
+│   ├── model_evaluation.py       # Core spine segmentation inference
+│   ├── dicom_utils.py            # DICOM I/O and alignment
+│   ├── viz_utils.py              # Clinical visualization
+│   └── regenerate_metadata.py    # DICOM metadata extraction
+│
+├── venturalitica_medical/        # Governance-instrumented version
+│   └── compliance_suite.py       # Compliance audit with vl.enforce()
+│
+├── shared_data/                  # Runtime data (generated, not committed)
+│   ├── dicom/                    # Downloaded DICOM volumes
+│   ├── models/                   # MONAI model bundle (Git LFS)
+│   │   └── wholeBody_ct_segmentation/
+│   └── policies/
+│       └── risks.oscal.yaml      # EU AI Act compliance controls
+│
+└── debug/                        # Development utilities
+```
+
+---
+
+## Compliance Controls (10 EU AI Act Checks)
 
 The `risks.oscal.yaml` policy enforces:
 
 **Article 10 — Data Governance:**
-1. **Demographic Parity**: Minority sex representation > 30%
-2. **Scanner Robustness**: Min Dice > 0.85 across all major manufacturers
-3. **Small Volume Safety**: Dice > 0.75 for bottom 25% volume cases
-4. **Lesion Type Robustness**: Dice > 0.80 across Lytic/Blastic phenotypes
+1. Demographic Parity: Minority sex representation > 30%
+2. Scanner Robustness: Min Dice > 0.85 across manufacturers
+3. Small Volume Safety: Dice > 0.75 for bottom 25% volume cases
+4. Lesion Type Robustness: Dice > 0.80 across Lytic/Blastic phenotypes
 
 **Article 15 — Accuracy & Robustness:**
-5. **Global Accuracy**: Mean Dice > 0.85
-6. **Gender Fairness**: Male/Female performance gap < 5%
-7. **Age Fairness**: Performance drop < 10% for elderly (>70)
-8. **Cancer Robustness**: Dice > 0.80 for top 3 cancer types
-9. **Data Leakage Check**: Max single Dice < 0.99 (no train-test leakage)
+5. Global Accuracy: Mean Dice > 0.85
+6. Gender Fairness: Male/Female performance gap < 5%
+7. Age Fairness: Performance drop < 10% for elderly (>70)
+8. Cancer Robustness: Dice > 0.80 for top 3 cancer types
+9. Data Leakage Check: Max single Dice < 0.99
 
 **Article 15 — Safety:**
-10. **Confidence Calibration**: Correlation > 0.5 between confidence and accuracy
+10. Confidence Calibration: Correlation > 0.5 between confidence and accuracy
 
 ---
 
-## 📦 Dependencies
+## Comparison: Base vs Venturalitica
 
-### Base Medical (`base_medical/`)
-- `monai[all]>=1.2.0` — Medical imaging framework
-- `torch>=2.0.0` — Deep learning
-- `numpy>=1.24.0` — Numerical computing
-- `pandas>=2.0.0` — Data manipulation
-- `matplotlib>=3.7.0` — Visualization
-- `scikit-image>=0.21.0` — Image processing
-
-### Venturalitica Medical (`venturalitica_medical/`)
-- All base dependencies +
-- `venturalitica>=0.5.0` — Governance SDK
-- `codecarbon>=2.2.0` — Carbon footprint tracking
+| Feature | Base | Venturalitica |
+|---------|------|---------------|
+| Core ML | MONAI SegResNet | MONAI SegResNet |
+| Inference | Yes | Yes |
+| Governance Monitoring | No | `vl.monitor()` (7 probes) |
+| Compliance Checking | No | `vl.enforce()` (10 controls) |
+| Carbon Tracking | No | codecarbon |
+| Evidence Vault | No | `.venturalitica/runs/` |
 
 ---
 
-## 🔧 Model Architecture
+## Requirements
 
-**MONAI Bundle:** WholeBody CT Segmentation
-- **Type:** SegResNet (Residual Segmentation Network)
-- **Classes:** 105 anatomical structures
-- **Input:** 3D CT volume (512×512×N voxels)
-- **Output:** 105-class semantic segmentation mask
-- **Training Dataset:** ~300 clinical CT scans
+- Python >= 3.11
+- CUDA-capable GPU (for inference)
+- Git LFS (for model weights)
+- ~1 GB disk per patient (DICOM data)
 
 ---
 
-## 📋 Dataset: Clinical CT Cohort
-
-- **Source:** Multi-center CT studies
-- **Total Subjects:** ~1,000 CT scans
-- **Demographics:** Age 18-95, male/female, multiple ethnicities
-- **DICOM Format:** Full metadata (patient, scanner, acquisition parameters)
-- **Annotations:** Expert-traced spine segmentations
-- **Location:** `shared_data/cohort_results.csv` (metadata + inference results)
-
----
-
-## 🎓 Learning Outcomes
-
-By comparing base vs venturalitica versions, you'll learn:
-
-1. **Clinical ML Pipeline** — How spine segmentation works on 3D medical imaging
-2. **DICOM Processing** — How to handle real medical imaging data
-3. **Governance Instrumentation** — How `vl.enforce()` wraps inferences
-4. **Robustness Metrics** — How to evaluate scanner diversity and fairness
-5. **Compliance Automation** — How OSCAL policies automate regulatory checks
-6. **Carbon Tracking** — How to measure ML environmental impact
-
----
-
-## 🔍 Key Utilities
-
-### `dicom_utils.py` (340 LOC)
-Core DICOM handling library used by all modules:
-- `load_dicom_volume_robust()` — Robust volume loading with alignment
-- `sort_dicom_files()` — Sort DICOM series by z-position
-- `find_ct_and_seg_files()` — Locate CT and segmentation pairs
-
-### `viz_utils.py` (144 LOC)
-Clinical visualization utilities:
-- `plot_axial_view()` — Display axial CT slices with segmentation overlay
-- `create_audit_panel()` — Create 3×3 audit visualization grids
-
-### `regenerate_metadata.py` (93 LOC)
-DICOM metadata extraction:
-- Extract patient demographics
-- Extract scanner parameters
-- Create metadata CSV for governance audit
-
----
-
-## 🐛 Debugging
-
-All development and debugging scripts are in `debug/`:
-
-```bash
-# Validate DICOM alignment
-python debug/debug_mask_alignment.py
-
-# Inspect loader behavior
-python debug/debug_loaders.py
-
-# Test MONAI bundle
-python debug/test_bundle.py
-
-# Check Z-axis alignment
-python debug/inspect_dicom_alignment.py
-```
-
----
-
-## 📚 See Also
-
-- [MONAI Documentation](https://monai.io)
-- [EU AI Act Compliance](https://ec.europa.eu/info/law/better-regulation/have-your-say/initiatives/12951_en)
-- [OSCAL Policy Framework](https://pages.nist.gov/OSCAL/)
-- [Medical Imaging Standards (DICOM)](https://www.dicomstandard.org/)
-
----
-
-**Venturalitica v0.5.0** — Governance for Responsible AI in Healthcare
+**Venturalitica v0.5.1** — Governance for Responsible AI in Healthcare

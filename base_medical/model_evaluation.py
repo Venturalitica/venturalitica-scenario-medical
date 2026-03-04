@@ -341,8 +341,9 @@ class SpineEvaluator:
                 })
                 print(f"      ✓ Metrics: Vol={vol} | Dice={dice:.4f} | Jaccard={jaccard:.4f}")
             
-            # Incremental save
-            pd.DataFrame(results).to_csv("cohort_results.csv", index=False)
+            # Incremental save to shared_data/
+            results_path = Path(__file__).parent.parent / "shared_data" / "cohort_results.csv"
+            pd.DataFrame(results).to_csv(results_path, index=False)
             
             count += 1
             
@@ -396,9 +397,17 @@ def main(model_path=None, data_path=None):
     evaluator = SpineEvaluator()
     results_df = evaluator.evaluate_cohort(df, limit=None)
 
-    # Save
-    results_df.to_csv("cohort_results.csv", index=False)
-    print("\n✅ Cohort Processing Complete. Results saved to cohort_results.csv")
+    # Save to shared_data/
+    scenario_root = Path(__file__).parent.parent
+    results_path = scenario_root / "shared_data" / "cohort_results.csv"
+    results_df.to_csv(results_path, index=False)
+    print(f"\n✅ Cohort Processing Complete. Results saved to {results_path}")
+
+    # Extract DICOM metadata for compliance audit
+    print("\n  Extracting DICOM metadata...")
+    sys.path.insert(0, str(Path(__file__).parent))
+    from regenerate_metadata import extract_metadata
+    extract_metadata(data_root)
 
 if __name__ == "__main__":
     main()
