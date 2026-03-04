@@ -1,63 +1,170 @@
 # Annex IV.1 — System Description (EU AI Act)
 # Provider: NovaMed Robotics | System: SpineGuard AI v1.0
 # Loaded by compliance_suite.py → venturalitica.models.SystemDescription
+#
+# Reference: Art. 11 + Annex IV, Section 1 (Technical Documentation)
+# Subsections (a)–(h) + foreseeable misuse per Art. 9(2)(b)
 
 name: "SpineGuard AI"
 version: "1.0.0"
 provider_name: "NovaMed Robotics GmbH"
 
+# (a) Intended purpose & general description
 intended_purpose: >
-  AI-assisted surgical planning for spinal metastasis segmentation in
-  pre-operative CT scans. Classified as MDR Class IIa+ medical device
-  under EU AI Act Art. 6(1) high-risk category (Annex I, Section A).
-  Intended for use by board-certified radiologists and spine surgeons
-  to delineate vertebral metastases for radiation therapy planning.
+  AI-powered intraoperative surgical planning and navigation assistance
+  for spinal metastasis segmentation in pre-operative and intraoperative
+  CT/CBCT scans. Classified as MDR Class IIb medical device (software
+  as a medical device — SaMD) under EU AI Act Art. 6(1) high-risk
+  category (Annex I, Section A, Rule 11). Intended for use by
+  board-certified neurosurgeons, orthopedic spine surgeons, and
+  neuroradiologists in tertiary hospital settings to: (1) delineate
+  vertebral and paraspinal metastases for radiation therapy planning,
+  (2) generate 3D anatomical models for pedicle screw trajectory
+  planning, (3) provide real-time intraoperative overlay on C-arm
+  fluoroscopy or O-arm CBCT. Target population: adult patients (18+)
+  with confirmed or suspected spinal metastatic disease from solid
+  tumors (breast, lung, prostate, renal, thyroid). Clinical validation
+  performed at 4 reference hospitals under IRB-approved protocols
+  (N=847 patients, 3,219 vertebral segments).
 
-potential_misuses: >
-  NOT intended for: (1) standalone diagnosis without radiologist review,
-  (2) pediatric patients under 18 years, (3) non-CT imaging modalities
-  (MRI, X-ray, PET), (4) emergency triage or real-time intraoperative
-  guidance, (5) automated treatment decisions without clinician oversight.
-
-instructions_for_use: >
-  Input: DICOM CT volumes (axial, >= 1mm slice thickness, soft-tissue kernel).
-  Output: 3D vertebral segmentation mask (NIfTI) with per-vertebra labels.
-  Workflow: PACS export -> SpineGuard AI -> radiologist review -> surgical plan.
-  Radiologist must verify all segmentation boundaries before clinical use.
-  Developed per IEC 62304 (software lifecycle) and IEC 82304-1 (health software).
-
-hardware_description: >
-  Requires NVIDIA CUDA-capable GPU with >= 8 GB VRAM. Validated on:
-  NVIDIA A100 (data center), RTX 4090 (workstation), T4 (cloud inference).
-  Minimum host RAM: 16 GB. Storage: 2 GB for model weights + DICOM staging.
-  Network: DICOM receiver on port 11112 (TLS 1.3 required for PHI transfer).
-
+# (b) Interaction with hardware and software
 interaction_description: >
-  Integrates with hospital PACS via DICOM C-STORE SCP. Receives CT volumes,
-  processes through SegResNet (3D, 105-channel) sliding-window inference,
-  returns segmentation as DICOM SEG or RT Structure Set. No direct patient
-  interaction — operates as a backend service within the clinical IT environment.
+  Integrates with hospital PACS via DICOM C-STORE SCP/SCU and DICOMweb
+  (WADO-RS, STOW-RS). Receives CT/CBCT volumes from surgical navigation
+  towers (compatible with BrainLab Curve, Medtronic StealthStation S8,
+  and Stryker NAV3i via DICOM bridge). Processes through SegResNet
+  (3D, 105-channel) sliding-window inference pipeline. Returns
+  segmentation as DICOM SEG objects or RT Structure Sets for direct
+  import into treatment planning systems (Eclipse, RayStation, Monaco).
+  Intraoperative mode: receives CBCT volumes from O-arm or Airo systems,
+  computes updated segmentation within 45-second latency target, and
+  streams overlay coordinates to navigation display via OpenIGTLink
+  protocol. No direct patient interaction — operates as a backend
+  service within the clinical IT environment (hospital DMZ, VLAN-isolated).
 
+# (c) Software dependencies and versions
 software_dependencies: >
-  Runtime: Python 3.11+, PyTorch 2.2, MONAI 1.3, CUDA 12.1.
-  Model: SegResNet (spatial_dims=3, in_channels=1, out_channels=105).
-  Inference: Sliding window (96x96x96 patches, 0.25 overlap, Gaussian blending).
-  DICOM: pydicom 2.4, highdicom 0.22. Orchestration: Venturalitica SDK 0.5.
+  Runtime: Python 3.11.8, PyTorch 2.2.1 (CUDA 12.1), MONAI 1.3.1,
+  MONAI Deploy 0.6. Model architecture: SegResNet (spatial_dims=3,
+  in_channels=1, out_channels=105, init_filters=32, blocks_down=[1,2,2,4],
+  blocks_up=[1,1,1]). Inference: sliding window (96x96x96 patches,
+  0.25 overlap, Gaussian importance weighting, test-time augmentation
+  with 4-fold axis flips). Pre-processing: MONAI transforms pipeline
+  (Spacing 1.0x1.0x1.0mm, ScaleIntensityRange HU[-200,1500]→[0,1],
+  CropForeground). Post-processing: connected component analysis,
+  vertebral labeling via centroid detection + anatomical atlas alignment
+  (T1-L5-S1). DICOM I/O: pydicom 2.4.4, highdicom 0.22.0.
+  Navigation bridge: OpenIGTLink 3.1 (C++ lib via pybind11 wrapper).
+  Orchestration and compliance: Venturalitica SDK 0.5.3.
+  Container base: NVIDIA Clara Deploy 0.8.1 on Ubuntu 22.04 LTS.
+  Dependency SBOM: CycloneDX 1.5 ML profile (auto-generated per build).
 
+# (d) Market placement form
 market_placement_form: >
-  On-premises deployment as Docker container within hospital DMZ.
-  No cloud processing of patient data. Model weights shipped via
-  signed OCI image. Licensing: per-site annual subscription.
+  On-premises deployment as signed OCI container image within hospital
+  DMZ infrastructure. No cloud processing of patient data — full air-gap
+  capable. Model weights distributed via signed OCI artifacts with
+  SLSA Level 3 provenance attestation. Two deployment tiers:
+  (1) Standalone planning station — Docker Compose on certified
+  workstation, (2) Integrated navigation — Kubernetes pod within
+  hospital surgical IT cluster, connected to navigation tower via
+  OpenIGTLink. Licensing: per-site annual subscription with CE-marked
+  software release cycle (quarterly updates, hotfixes within 72h SLA).
+  Distribution through authorized medical device distributors with
+  mandatory on-site installation and clinical validation by NovaMed
+  field service engineers.
 
+# (e) Hardware requirements
+hardware_description: >
+  Minimum compute: NVIDIA CUDA-capable GPU with >= 12 GB VRAM (inference)
+  or >= 24 GB VRAM (with test-time augmentation). Validated GPU matrix:
+  NVIDIA A100 40GB (data center, reference), RTX 4090 24GB (workstation),
+  L40S 48GB (surgical IT rack), T4 16GB (cloud inference — planning-only
+  mode). Host: 64-bit x86_64, minimum 32 GB RAM (recommended 64 GB for
+  concurrent multi-patient queue), NVMe SSD with >= 500 GB (DICOM staging
+  + model cache). Network: DICOM receiver on port 11112, TLS 1.3 required
+  for PHI transfer (IHE ATNA compliant), OpenIGTLink on port 18944 for
+  intraoperative streaming. UPS-backed power supply mandatory for
+  intraoperative use (IEC 60601-1 electrical safety compliance via
+  isolation transformer). Environmental: operating temperature 18-26°C,
+  rack-mounted 2U form factor for surgical IT installations.
+
+# (f) External features and visual interface elements
 external_features: >
-  Web-based review UI for radiologists (OHIF Viewer integration).
-  Visual overlay of segmentation contours on axial/sagittal/coronal views.
-  Color-coded vertebral labels (L5-C1) with confidence heatmap.
-  PDF export of segmentation report with measurement annotations.
+  Web-based review UI for radiologists and surgeons (OHIF Viewer v3
+  integration with custom SpineGuard plugin). Visual features:
+  (1) 3D volumetric rendering with adjustable bone/soft-tissue opacity
+  and metastasis color-coding (RECIST color scale), (2) multi-planar
+  reconstruction (axial/sagittal/coronal) with AI overlay toggle,
+  (3) vertebral labels (C1-S5) with per-vertebra Dice confidence score
+  and uncertainty heatmap, (4) pedicle screw trajectory planning module
+  with collision detection and screw diameter optimization,
+  (5) mixed-reality export: 3D segmentation mesh (STL/glTF) compatible
+  with surgical VR/AR headsets for pre-operative rehearsal,
+  (6) PDF/DICOM SR structured report with measurement annotations,
+  tumor volume quantification, and SINS (Spinal Instability Neoplastic
+  Score) auto-calculation from segmentation geometry.
 
+# (g) User interface description
 ui_description: >
-  Radiologist dashboard: case list with AI status indicators (pending,
-  complete, review required). 3D volume rendering with adjustable opacity.
-  Slice-by-slice navigation with segmentation overlay toggle. Edit tools
-  for manual correction of AI-generated contours. Audit trail of all
-  modifications with timestamp and user identity.
+  Surgeon dashboard: patient worklist with AI processing status
+  (queued → processing → review required → approved → locked).
+  Case viewer: synchronized multi-planar display with AI segmentation
+  overlay, adjustable transparency slider, and manual contour editing
+  tools (brush, smart scissors, region grow). 3D spine visualization
+  with clickable vertebral bodies showing per-level metrics (Dice score,
+  tumor volume mL, vertebral body involvement %). Intraoperative view:
+  minimalist display optimized for OR monitors — large segmentation
+  overlay on CBCT, real-time instrument tracking visualization,
+  screw trajectory guidance with safe-zone corridor display.
+  Audit panel: complete modification history with timestamped entries,
+  user identity (badge-in via hospital AD/LDAP SSO), and reason-for-edit
+  dropdowns (clinical disagreement, boundary refinement, artifact
+  correction, false positive removal). Role-based access: surgeon
+  (full edit), radiologist (review + annotate), physicist (dosimetry
+  export only), auditor (read-only with full trail visibility).
+
+# (h) Instructions for use
+instructions_for_use: >
+  Input requirements: DICOM CT volumes — axial acquisition, slice
+  thickness <= 1.5mm (optimal 0.625-1.0mm), soft-tissue reconstruction
+  kernel (B30f-B40f or equivalent), contrast-enhanced preferred for
+  soft-tissue metastases (portal venous phase, 70-80s post-injection).
+  Supported scanners: validated on Siemens (SOMATOM Force, Edge Plus),
+  GE (Revolution CT, Discovery CT750 HD), Philips (Brilliance iCT,
+  IQon Spectral CT). Intraoperative CBCT: O-arm II (Medtronic) and
+  Airo (Brainlab/Stryker). Output: 3D segmentation mask (DICOM SEG
+  with vertebral labels T1-S5 + tumor regions), RT Structure Set for
+  TPS import, 3D mesh (STL) for printing/VR. Clinical workflow:
+  PACS export → SpineGuard AI queue → automated inference (median
+  90s per study) → surgeon/radiologist review → digital signature →
+  export to TPS or navigation system. MANDATORY: board-certified
+  physician must verify ALL segmentation boundaries before any clinical
+  decision. AI output is ADVISORY ONLY — the treating physician retains
+  full clinical responsibility. IFU compliant with IEC 62304 (software
+  lifecycle), IEC 82304-1 (health software), ISO 14971 (risk management),
+  ISO 13485 (QMS), and IEC 62366-1 (usability engineering).
+
+# (*) Foreseeable misuse — Art. 9(2)(b)
+potential_misuses: >
+  NOT intended for: (1) standalone diagnosis or treatment decisions
+  without qualified physician review — AI provides decision SUPPORT,
+  not autonomous clinical action, (2) pediatric patients under 18 years
+  — training data excludes pediatric anatomy and growth plates,
+  (3) non-CT imaging modalities (MRI, X-ray, PET-CT fusion) — model
+  trained exclusively on CT Hounsfield unit distributions, (4) emergency
+  triage, trauma assessment, or real-time intraoperative decisions
+  without pre-operative CT baseline — system requires minimum 30-second
+  processing latency incompatible with acute resuscitation timelines,
+  (5) automated treatment plan generation without physicist/dosimetrist
+  verification — segmentation accuracy alone does not guarantee treatment
+  plan safety, (6) use in non-validated scanner models or acquisition
+  protocols outside specified parameters — degraded performance with
+  thick-slice CT (>2mm), non-standard kernels, or significant metal
+  artifact from prior instrumentation, (7) commercial re-distribution
+  of AI-generated segmentations or 3D models without NovaMed licensing
+  agreement and CE marking chain-of-custody, (8) connection to public
+  internet or cloud services — system designed for air-gapped hospital
+  DMZ operation only, (9) use as sole evidence for clinical trial
+  endpoint assessment — requires independent central radiologist review
+  per RECIST 1.1 / RANO-BM criteria.
