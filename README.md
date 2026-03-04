@@ -23,8 +23,8 @@ uv sync --extra gpu
 ### 2. Download DICOM Data from TCIA
 
 ```bash
-# Download 1 patient (~800 files, ~1 min)
-uv run download_data.py --patients 10543 --skip-clinical
+# Download 1 patient (~800 files, ~1 min) + clinical metadata
+uv run download_data.py --patients 10543
 
 # Download 5 patients for a broader cohort
 uv run download_data.py --limit 5
