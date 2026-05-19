@@ -25,9 +25,10 @@ from venturalitica.models import SystemDescription
 SCENARIO_ROOT = Path(__file__).parent.parent
 SHARED_DATA = SCENARIO_ROOT / "shared_data"
 
-# Canonical policy/annex locations
-DATA_POLICY = SHARED_DATA / "policies" / "data_policy.oscal.yaml"
-MODEL_POLICY = SHARED_DATA / "policies" / "model_policy.oscal.yaml"
+# Canonical policy/annex locations.
+# Single OSCAL `component-definition` covering Art. 10 (data) + Art. 15 (model)
+# — consolidated 2026-05-19 to match the SDK's unified assessment-plan output.
+POLICY = SHARED_DATA / "policies" / "assessment_plan.oscal.yaml"
 ANNEX_IV = SHARED_DATA / "annex_iv1.yaml"
 
 
@@ -35,11 +36,10 @@ def stage_for_dashboard():
     """Copy policy and annex files to SCENARIO_ROOT so `venturalitica ui` finds them.
 
     The Streamlit dashboard checks CWD for:
-      system_description.yaml, model_policy.oscal.yaml, data_policy.oscal.yaml
+      system_description.yaml, assessment_plan.oscal.yaml
     """
     for src, dst_name in [
-        (DATA_POLICY, "data_policy.oscal.yaml"),
-        (MODEL_POLICY, "model_policy.oscal.yaml"),
+        (POLICY, "assessment_plan.oscal.yaml"),
         (ANNEX_IV, "system_description.yaml"),
     ]:
         dst = SCENARIO_ROOT / dst_name
@@ -119,13 +119,13 @@ def phase1_data_governance(merged_df: pd.DataFrame) -> list:
     print("  PHASE 1 — Data Governance (Art. 10)")
     print("-" * 60)
 
-    print(f"  Policy: data_policy.oscal.yaml")
+    print(f"  Policy: assessment_plan.oscal.yaml (Art. 10 — Data)")
     print(f"  SDK computes: disparate_impact, demographic_parity_diff, k_anonymity, data_completeness")
     print(f"  DataFrame: {len(merged_df)} rows x {len(merged_df.columns)} columns")
 
     results = venturalitica.enforce(
         data=merged_df,
-        policy=str(DATA_POLICY),
+        policy=str(POLICY),
     )
 
     _print_phase_results(results, "Data Governance")
@@ -270,11 +270,11 @@ def phase2_model_performance(merged_df: pd.DataFrame) -> list:
             print(f"    {w}")
 
     # Enforce
-    print(f"\n  Policy: model_policy.oscal.yaml")
+    print(f"\n  Policy: assessment_plan.oscal.yaml (Art. 15 — Model)")
 
     results = venturalitica.enforce(
         metrics=audit_metrics,
-        policy=str(MODEL_POLICY),
+        policy=str(POLICY),
     )
 
     _print_phase_results(results, "Model Performance")
@@ -497,7 +497,7 @@ def run_compliance_suite(cohort_file: str | None = None, model_label: str = "MON
     # Prerequisite: the SaaS side must first emit the `component-definition`
     # policy with `ai-system-uuid` / `ai-system-version-uuid` stamped into
     # metadata.props[] (currently reserved as commented slots in
-    # data_policy.oscal.yaml and model_policy.oscal.yaml). The SDK echoes
+    # assessment_plan.oscal.yaml). The SDK echoes
     # both UUIDs back into the assessment-results envelope so the platform
     # binds the run to the correct AISystemVersion without any "latest"
     # fallback.

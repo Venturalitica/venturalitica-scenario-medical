@@ -38,7 +38,7 @@ We use a subset of the 104 predicted segments — specifically the 24 vertebral 
 
 ### Policies: OSCAL format
 
-The compliance policies are defined as canonical [NIST OSCAL v1.2.2](https://pages.nist.gov/OSCAL/) `component-definition` YAML files in `shared_data/policies/`. Each control specifies a metric key, threshold, comparison operator, and input bindings. The SDK reads these policies at runtime — no compliance logic is hardcoded.
+The compliance policy is defined as a single canonical [NIST OSCAL v1.2.2](https://pages.nist.gov/OSCAL/) `component-definition` document at `shared_data/policies/assessment_plan.oscal.yaml`. It carries the 13 controls (4 data + 9 model) for VertebraSeg AI v1.0.0 — same envelope the Venturalitica SDK emits via `vl pull`. Each control specifies a metric key, threshold, comparison operator, and input bindings. The SDK reads the policy at runtime — no compliance logic is hardcoded.
 
 ---
 
@@ -145,8 +145,7 @@ shared_data/
 ├── models/                     # MONAI model bundle (Git LFS)
 │   └── wholeBody_ct_segmentation/
 └── policies/
-    ├── data_policy.oscal.yaml  # Art. 10 Data Governance (4 controls)
-    └── model_policy.oscal.yaml # Art. 15 Model Performance (9 controls)
+    └── assessment_plan.oscal.yaml # Canonical OSCAL component-definition (13 controls: 4 data + 9 model)
 
 compliance_report_sdk.md        # Consolidated audit report (generated)
 .venturalitica/runs/            # Evidence vault with trace + results JSON
@@ -371,8 +370,7 @@ venturalitica-scenario-medical/
 │   ├── models/                   # MONAI model bundle (Git LFS)
 │   │   └── wholeBody_ct_segmentation/
 │   └── policies/
-│       ├── data_policy.oscal.yaml   # Canonical NIST OSCAL v1.2.2
-│       └── model_policy.oscal.yaml  # Canonical NIST OSCAL v1.2.2
+│       └── assessment_plan.oscal.yaml  # Canonical NIST OSCAL v1.2.2 (13 controls: 4 data + 9 model)
 │
 └── debug/                        # Development utilities
 ```

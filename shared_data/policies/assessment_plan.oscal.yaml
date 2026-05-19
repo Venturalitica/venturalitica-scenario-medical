@@ -1,19 +1,34 @@
-# EU AI Act Art. 15 — Model Performance (Vertebra Segmentation)
+# EU AI Act Art. 10 + Art. 15 — Assurance Plan (Vertebra Segmentation)
 #
 # Canonical NIST OSCAL v1.2.2 `component-definition` envelope.
-# See data_policy.oscal.yaml for migration notes and conventions.
+# Single source of truth for the 13 controls applied to VertebraSeg AI v1.0.0:
+#   - 4 data-governance controls (Art. 10)  → evaluated in Phase 1 via vl.enforce(data=df)
+#   - 9 model-performance controls (Art. 15) → evaluated in Phase 2 via vl.enforce(metrics={...})
 #
-# Scope: vertebral body segmentation from CT (C1–S1). The model's
-# only output is the segmentation mask. Downstream surgical planning
-# is out of scope of this policy — separately validated tooling
-# handles trajectory, screw selection, and clinical decisions.
+# Replaces the legacy split between `data_policy.oscal.yaml` and
+# `model_policy.oscal.yaml` (consolidated 2026-05-19) to match the unified
+# `assessment-plan` document the SDK emits from 0.6.0 onwards.
+#
+# Conventions used here:
+#   - UUIDs are deterministic UUID v5 (namespace: VL_OSCAL_NAMESPACE,
+#     sub-namespace per object kind). Same (kind, id) pair ALWAYS yields
+#     the same UUID — so re-emitting this document is idempotent.
+#   - Input bindings use `input.<slot>` (NIST regex requires dot, not colon).
+#   - `lifecycle_phase`, `enforcement_mode`, `evaluation_method`, `risk_id`
+#     are recognized profile properties — the SDK carries them into the
+#     emitted assessment-results as CharacterizationFacets.
+#
+# When the SaaS push is wired, the SaaS-side AP emitter stamps
+# `ai-system-uuid` and `ai-system-version-uuid` into metadata.props[]
+# below so the platform binds findings back to the correct AISystemVersion
+# by UUID. Slots are reserved (commented out) below.
 ---
 component-definition:
   uuid: 089cea34-c18b-51fb-b969-b7c64fc16472  # uuid5(NS_CD, "vertebraseg-ai:1.0.0")
   metadata:
-    title: "EU AI Act Art. 15 — Model Performance (Vertebra Segmentation)"
-    last-modified: "2026-05-17T00:00:00.000Z"
-    version: "3.0.0"
+    title: "EU AI Act Art. 10 + Art. 15 — Assurance Plan (Vertebra Segmentation)"
+    last-modified: "2026-05-19T00:00:00.000Z"
+    version: "4.0.0"
     oscal-version: "1.2.2"
     # props:
     #   - { name: ai-system-uuid,         value: "<stamped by SaaS AP emitter>" }
@@ -22,13 +37,83 @@ component-definition:
     - uuid: 1e5d1cf9-6d16-57ca-ad00-10421af4f45c  # uuid5(NS_C, "vertebraseg-ai:1.0.0")
       type: software
       title: "VertebraSeg AI v1.0.0"
-      description: "AI System Version with deployed AssuranceMeasures (Art. 15 vertebra segmentation performance)."
+      description: "AI System Version with deployed AssuranceMeasures (Art. 10 data governance + Art. 15 model performance)."
       control-implementations:
         - uuid: ae3c72aa-4a88-5064-a028-62c9abf82c35  # uuid5(NS_CI, "vertebraseg-ai:1.0.0")
           source: "#vl-ai-assurance-profile-2026"
-          description: "Vertebra-segmentation guardrails enforced at validation time."
+          description: "Data + model guardrails enforced at training and validation time."
           implemented-requirements:
-            # --- Article 15: Accuracy ---
+
+            # ============================================================
+            # Article 10 — Data Governance
+            # Evaluated in Phase 1 via vl.enforce(data=df) — SDK-computed
+            # ============================================================
+
+            - uuid: 836b6f72-70aa-5689-a0dd-2ab91f219c68
+              control-id: fairness-sex-disparate-impact
+              description: "Disparate impact ratio across biological sex must exceed 0.80 (four-fifths rule)."
+              props:
+                - { name: metric_key,        value: disparate_impact }
+                - { name: operator,          value: gt }
+                - { name: threshold,         value: "0.80" }
+                - { name: severity,          value: high }
+                - { name: enforcement_mode,  value: block }
+                - { name: evaluation_method, value: automated }
+                - { name: lifecycle_phase,   value: training }
+                - { name: input.target,      value: is_successful }
+                - { name: input.prediction,  value: is_successful }
+                - { name: input.dimension,   value: Sex }
+                - { name: article,           value: "10" }
+
+            - uuid: 7bf60e19-7581-5ba9-ad77-00baa53424ee
+              control-id: fairness-age-demographic-parity
+              description: "Demographic parity difference across age groups must be below 0.15."
+              props:
+                - { name: metric_key,        value: demographic_parity_diff }
+                - { name: operator,          value: lt }
+                - { name: threshold,         value: "0.15" }
+                - { name: severity,          value: high }
+                - { name: enforcement_mode,  value: block }
+                - { name: evaluation_method, value: automated }
+                - { name: lifecycle_phase,   value: training }
+                - { name: input.target,      value: is_successful }
+                - { name: input.prediction,  value: is_successful }
+                - { name: input.dimension,   value: age_group }
+                - { name: article,           value: "10" }
+
+            - uuid: fad06d11-9a5a-5e79-8cfd-f97996c8e2fd
+              control-id: privacy-k-anonymity
+              description: "Patient quasi-identifiers must satisfy k >= 3 anonymity."
+              props:
+                - { name: metric_key,        value: k_anonymity }
+                - { name: operator,          value: gte }
+                - { name: threshold,         value: "3" }
+                - { name: severity,          value: high }
+                - { name: enforcement_mode,  value: block }
+                - { name: evaluation_method, value: automated }
+                - { name: lifecycle_phase,   value: training }
+                - { name: quasi_identifiers, value: "Age,Sex,Manufacturer" }
+                - { name: article,           value: "10" }
+
+            - uuid: a84afd8b-db0c-5f1b-ba8b-54c37039da13
+              control-id: data-quality-completeness
+              description: "Dataset completeness across all columns must exceed 90%."
+              props:
+                - { name: metric_key,        value: data_completeness }
+                - { name: operator,          value: gte }
+                - { name: threshold,         value: "0.90" }
+                - { name: severity,          value: medium }
+                - { name: enforcement_mode,  value: warn }
+                - { name: evaluation_method, value: automated }
+                - { name: lifecycle_phase,   value: training }
+                - { name: article,           value: "10" }
+
+            # ============================================================
+            # Article 15 — Model Performance
+            # Evaluated in Phase 2 via vl.enforce(metrics={...})
+            # ============================================================
+
+            # --- Accuracy ---
             - uuid: 86839918-5f76-5659-8940-8a49089ac817
               control-id: vertebra-segmentation-dice
               description: "Global Mean Dice over all vertebrae (C1–S1) > 0.85."
@@ -64,7 +149,7 @@ component-definition:
                 - { name: threshold_justification, value: "Dice >= 0.99 on any single case is statistically improbable for a hold-out subject and signals train/test contamination. Calibrated against the published MONAI wholeBody_ct_segmentation validation distribution (median 0.91, p99 0.96)." }
                 - { name: article,                 value: "15" }
 
-            # --- Article 15: Robustness / Fairness (MICCAI / FAIMI-grounded) ---
+            # --- Robustness / Fairness (MICCAI / FAIMI-grounded) ---
             # These controls follow the subgroup-disparity discipline laid
             # out in the FAIMI (Fairness of AI in Medical Imaging) MICCAI
             # workshop series and the npj Digital Medicine 2024 systematic
@@ -72,6 +157,7 @@ component-definition:
             # reports a Rawlsian *worst-case* Dice across a sensitive
             # stratum so that a model with a strong overall mean cannot
             # mask a subgroup failure.
+
             - uuid: d45df328-810b-5c7b-8d79-078d491e36c2
               control-id: robustness-scanner-bias
               description: "Min Dice > 0.85 across all scanner manufacturers."
@@ -117,13 +203,6 @@ component-definition:
                 - { name: threshold_justification, value: "MONAI's wholeBody_ct_segmentation is trained predominantly on sub-millimetre TotalSegmentator data. Acquisitions at 2.5 mm thickness or above lose vertebral edge fidelity. Stratifying by thickness exposes the protocol-dependence emphasised in the FAIMI 2025 workshop on technical-attribute fairness." }
                 - { name: article,                 value: "15" }
 
-            # Petersen et al. (Nature Medicine 2024) and the FAIMI 2024
-            # systematic review identified the elderly-vs-younger gap as
-            # one of the most under-reported failure modes in CT
-            # segmentation. The metric is the |mean Dice ≥65 − mean Dice <65|
-            # absolute difference; it is computed in Phase 2 against the
-            # inference-derived Dice column, hence its placement here
-            # under the model policy rather than the data policy.
             - uuid: fe707aff-ae03-5c29-87f6-ff08a074e5e4
               control-id: fairness-age-elderly
               description: "Mean Dice gap between elderly (≥65) and <65 patients must stay below 0.05."
@@ -156,7 +235,7 @@ component-definition:
                 - { name: threshold_justification, value: "Per Petersen et al. (Nature Medicine 2024) and the FAIMI MICCAI 2024/2025 reviews, mean and per-axis subgroup analyses miss intersectional failure modes (e.g. elderly female on a thick-slice non-reference scanner). The Rawlsian min across the full cross-product surfaces the worst-served patient — the relevant safety threshold for a high-risk SaMD." }
                 - { name: article,                 value: "15" }
 
-            # --- Article 15: Safety ---
+            # --- Safety ---
             - uuid: 90418857-02a0-5512-b6e6-5f2c85c8f81f
               control-id: safety-small-vertebra
               description: "Safety on small vertebrae (bottom 25% volume) > 0.75 Dice."

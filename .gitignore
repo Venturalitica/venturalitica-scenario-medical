@@ -52,8 +52,6 @@ Annex_IV.*.md
 demo_slices/
 # Dashboard-staged copies (canonical sources live in shared_data/)
 /system_description.yaml
-/data_policy.oscal.yaml
-/model_policy.oscal.yaml
 /assessment_plan.oscal.yaml
 compliance_plots/
 debug_outputs/
