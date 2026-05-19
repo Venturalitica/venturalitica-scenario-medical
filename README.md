@@ -2,7 +2,7 @@
 
 **Venturalitica SDK ≥ 0.6.10** — Three-layer compliance audit on a real medical imaging pipeline. Policies use canonical NIST OSCAL v1.2.2 `component-definition` envelopes (migrated 2026-05-17). Annex IV §1 is auto-grounded from `shared_data/annex_iv1.yaml` so the agentic writer cannot hallucinate a different product.
 
-This repository demonstrates how to add EU AI Act compliance controls to an existing ML system — without changing the model or the inference code. It downloads real DICOM data from a public cancer imaging archive, runs GPU inference with a pre-trained MONAI model, and then audits the entire pipeline against 11 regulatory controls using the Venturalitica SDK.
+This repository demonstrates how to add EU AI Act compliance controls to an existing ML system — without changing the model or the inference code. It downloads real DICOM data from a public cancer imaging archive, runs GPU inference with a pre-trained MONAI model, and then audits the entire pipeline against **13 regulatory controls** using the Venturalitica SDK.
 
 ---
 
@@ -38,7 +38,7 @@ We use a subset of the 104 predicted segments — specifically the 24 vertebral 
 
 ### Policies: OSCAL format
 
-The compliance policies are defined as [OSCAL](https://pages.nist.gov/OSCAL/) assessment-plan YAML files in `shared_data/policies/`. Each control specifies a metric key, threshold, comparison operator, and input bindings. The SDK reads these policies at runtime — no compliance logic is hardcoded.
+The compliance policies are defined as canonical [NIST OSCAL v1.2.2](https://pages.nist.gov/OSCAL/) `component-definition` YAML files in `shared_data/policies/`. Each control specifies a metric key, threshold, comparison operator, and input bindings. The SDK reads these policies at runtime — no compliance logic is hardcoded.
 
 ---
 
@@ -121,7 +121,7 @@ This runs:
 2. **`vl.monitor()`** — 7 governance probes (hardware, carbon, BOM, trace, integrity, artifact, handshake)
 3. **DICOM metadata extraction** (demographics, scanner parameters)
 4. **Phase 1** — `vl.enforce(data=df)` — SDK-computed fairness & privacy metrics (4 controls)
-5. **Phase 2** — `vl.enforce(metrics={...})` — Domain-specific model performance (7 controls)
+5. **Phase 2** — `vl.enforce(metrics={...})` — Domain-specific model performance (9 controls)
 6. **Phase 3** — Annex IV.1 system description identity card
 7. **Evidence vault** at `.venturalitica/runs/`
 
@@ -146,7 +146,7 @@ shared_data/
 │   └── wholeBody_ct_segmentation/
 └── policies/
     ├── data_policy.oscal.yaml  # Art. 10 Data Governance (4 controls)
-    └── model_policy.oscal.yaml # Art. 15 Model Performance (7 controls)
+    └── model_policy.oscal.yaml # Art. 15 Model Performance (9 controls)
 
 compliance_report_sdk.md        # Consolidated audit report (generated)
 .venturalitica/runs/            # Evidence vault with trace + results JSON
@@ -183,7 +183,7 @@ exactly which controls disagree across model choices.
 
 ---
 
-## Compliance Controls (11 EU AI Act Checks)
+## Compliance Controls (13 EU AI Act Checks)
 
 ### Phase 1 — Data Governance, Art. 10 (4 controls, SDK-computed)
 
@@ -196,25 +196,27 @@ The SDK computes these metrics automatically from the patient DataFrame via `vl.
 | `privacy-k-anonymity` | `k_anonymity` | >= 3 | Min quasi-identifier group size (Age, Sex, Manufacturer) |
 | `data-quality-completeness` | `data_completeness` | >= 0.90 | Non-null fraction across all columns |
 
-### Phase 2 — Model Performance, Art. 15 (7 controls, domain metrics)
+### Phase 2 — Model Performance, Art. 15 (9 controls, domain metrics)
 
 Domain-specific aggregations computed from inference results and enforced via `vl.enforce(metrics={...})`:
 
 | Control | Metric | Threshold | What it measures |
 |---------|--------|-----------|------------------|
-| `model-accuracy-global` | `global_dice` | > 0.85 | Mean Dice coefficient across cohort |
-| `data-leakage-check` | `max_single_dice` | < 0.99 | Train-test leakage detection |
+| `vertebra-segmentation-dice` | `global_dice` | > 0.85 | Mean Dice across vertebrae (C1–S1) |
+| `data-leakage-check` | `max_single_dice` | < 0.99 | Train-test leakage detection (per-case ceiling) |
 | `robustness-scanner-bias` | `min_scanner_dice` | > 0.85 | Worst Dice across scanner manufacturers |
-| `robustness-lesion-type` | `min_lesion_type_dice` | > 0.80 | Worst Dice across Lytic/Blastic phenotypes |
-| `robustness-cancer-types` | `min_cancer_dice` | > 0.80 | Worst Dice across top 3 cancer types |
-| `safety-small-volume` | `small_vol_dice` | > 0.75 | Dice for bottom 25% tumor volume cases |
-| `safety-calibration` | `confidence_correlation` | > 0.50 | Confidence-accuracy correlation (Pearson r) |
+| `fairness-scanner-model` | `min_scanner_model_dice` | > 0.80 | Finer grain: worst Dice across `ManufacturerModelName` |
+| `fairness-slice-thickness` | `min_thickness_dice` | > 0.80 | Worst Dice across slice-thickness strata (≤1 / 1–2 / >2 mm) |
+| `fairness-age-elderly` | `elderly_dice_gap` | < 0.05 | Dice gap elderly (≥65) vs <65 |
+| `worst-subgroup-dice` | `worst_subgroup_dice` | > 0.75 | Rawlsian floor: sex × age × scanner-model × thickness intersection |
+| `safety-small-vertebra` | `small_vol_dice` | > 0.75 | Dice on bottom-25% smallest vertebrae |
+| `safety-calibration` | `confidence_correlation` | > 0.50 | Confidence-Dice correlation (Pearson r) |
 
 ### Phase 3 — Annex IV.1 System Description
 
 Structured identity card rendered from `annex_iv1.yaml`, covering all EU AI Act Annex IV Section 1 subsections: (a) purpose, (b) hardware/software interaction, (c) dependencies, (d) market form, (e) hardware requirements, (f) external features, (g) UI, (h) instructions for use, plus foreseeable misuse.
 
-> The system description uses fictional names (NovaMed Robotics / SpineGuard AI) for demonstration purposes.
+> The system description uses fictional names (NovaMed Robotics GmbH / VertebraSeg AI v1.0.0) for demonstration purposes.
 
 ---
 
@@ -314,8 +316,8 @@ uv run vl export-annex-iv --agentic --provider cloud --out file
 ```
 
 The SDK 0.6.10 grounds every §1/§2/§3/§5/§8/§9 prompt in `shared_data/annex_iv1.yaml`
-(the System Identity Card) — so the writer references *SpineGuard AI* /
-*NovaMed Robotics* by name, with the actual hardware and foreseeable misuse
+(the System Identity Card) — so the writer references *VertebraSeg AI* /
+*NovaMed Robotics GmbH* by name, with the actual hardware and foreseeable misuse
 declared in YAML, instead of hallucinating a generic banking scenario. The
 narrative is cached under `.venturalitica/annex_iv.cache.json` keyed on
 (language, model, run_id, provider, policy_hash, identity_card_hash) — edit
@@ -331,7 +333,7 @@ the identity card and the next run invalidates the cache automatically.
 | Inference | Yes | Yes |
 | Governance monitoring | — | `vl.monitor()` (7 probes) |
 | Data governance | — | `vl.enforce(data=df)` (4 controls) |
-| Model performance | — | `vl.enforce(metrics={...})` (7 controls) |
+| Model performance | — | `vl.enforce(metrics={...})` (9 controls) |
 | Annex IV.1 | — | System description card |
 | Carbon tracking | — | codecarbon integration |
 | Software BOM | — | CycloneDX 1.5 ML profile |
