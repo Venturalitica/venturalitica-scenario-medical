@@ -1,6 +1,6 @@
 # Medical Spine Segmentation — EU AI Act Compliance Demo
 
-**Venturalitica SDK v0.6** — Three-layer compliance audit on a real medical imaging pipeline. Policies use canonical NIST OSCAL v1.2.2 `component-definition` envelopes (migrated 2026-05-17).
+**Venturalitica SDK ≥ 0.6.10** — Three-layer compliance audit on a real medical imaging pipeline. Policies use canonical NIST OSCAL v1.2.2 `component-definition` envelopes (migrated 2026-05-17). Annex IV §1 is auto-grounded from `shared_data/annex_iv1.yaml` so the agentic writer cannot hallucinate a different product.
 
 This repository demonstrates how to add EU AI Act compliance controls to an existing ML system — without changing the model or the inference code. It downloads real DICOM data from a public cancer imaging archive, runs GPU inference with a pre-trained MONAI model, and then audits the entire pipeline against 11 regulatory controls using the Venturalitica SDK.
 
@@ -160,12 +160,26 @@ compliance_report_sdk.md        # Consolidated audit report (generated)
 # Pure ML evaluation (no governance)
 python main.py --scenario base --data-path shared_data/dicom
 
-# Compliance audit only (after inference has already run)
+# Compliance audit only (after MONAI inference has already run)
 python main.py --scenario compliance
 
 # Full pipeline (inference + compliance in single session)
 python main.py --scenario full-pipeline --data-path shared_data/dicom
+
+# Inference with TotalSegmentator v2 (second model — pure ML, no governance)
+python main.py --scenario totalseg --data-path shared_data/dicom
+
+# Compliance audit on the TotalSegmentator cohort
+python main.py --scenario compliance-totalseg
+
+# Side-by-side comparison — audits BOTH cohorts and writes compare_report.md
+python main.py --scenario compare
 ```
+
+The `compare` scenario is the headline demo: same OSCAL policies, two
+independent inference engines (MONAI SegResNet vs TotalSegmentator v2),
+and the resulting verdicts emitted side by side so an auditor sees
+exactly which controls disagree across model choices.
 
 ---
 
@@ -286,6 +300,27 @@ cat compliance_report_sdk.md
 
 Markdown report with the consolidated verdict: how many controls passed, which failed, and whether the system can be deployed under EU AI Act.
 
+### Step 7 — Generate Annex IV with an Agentic LLM (optional)
+
+```bash
+# Local: ALIA-40b (BSC) via llama.cpp
+uv run vl export-annex-iv --agentic --provider alia --out file
+
+# Local: Ollama (default Mistral 7B)
+uv run vl export-annex-iv --agentic --provider ollama --model mistral --out file
+
+# Cloud: Mistral Magistral (requires MISTRAL_API_KEY)
+uv run vl export-annex-iv --agentic --provider cloud --out file
+```
+
+The SDK 0.6.10 grounds every §1/§2/§3/§5/§8/§9 prompt in `shared_data/annex_iv1.yaml`
+(the System Identity Card) — so the writer references *SpineGuard AI* /
+*NovaMed Robotics* by name, with the actual hardware and foreseeable misuse
+declared in YAML, instead of hallucinating a generic banking scenario. The
+narrative is cached under `.venturalitica/annex_iv.cache.json` keyed on
+(language, model, run_id, provider, policy_hash, identity_card_hash) — edit
+the identity card and the next run invalidates the cache automatically.
+
 ---
 
 ## Comparison: Base vs Venturalitica
@@ -308,30 +343,34 @@ Markdown report with the consolidated verdict: how many controls passed, which f
 
 ```
 venturalitica-scenario-medical/
-├── main.py                       # CLI orchestrator (4 scenarios)
+├── main.py                       # CLI orchestrator (7 scenarios)
 ├── download_data.py              # TCIA DICOM downloader (PEP 723, standalone)
+├── render_demo_slices.py         # Render coronal slice PNGs for slide decks
 ├── pyproject.toml                # Project config with [gpu] extra
 │
-├── base_medical/                 # Pure ML pipeline (no governance)
-│   ├── model_evaluation.py       # SpineEvaluator: SegResNet inference
+├── base_medical/                 # Pure ML pipelines (no governance)
+│   ├── model_evaluation.py       # SpineEvaluator: MONAI SegResNet inference
+│   ├── totalseg_evaluation.py    # TotalSegmentator v2 inference harness
 │   ├── dicom_utils.py            # DICOM I/O, volume loading, alignment
 │   ├── viz_utils.py              # Clinical visualization utilities
 │   └── regenerate_metadata.py    # DICOM header → trusted_metadata.csv
 │
 ├── venturalitica_medical/        # Governance-instrumented layer
-│   └── compliance_suite.py       # 3-phase compliance audit (~300 LOC)
+│   ├── compliance_suite.py       # 3-phase compliance audit (~300 LOC)
+│   └── compare_models.py         # Side-by-side audit of MONAI vs TotalSeg cohorts
 │
 ├── shared_data/                  # Data directory
-│   ├── annex_iv1.yaml            # Annex IV.1 system description
+│   ├── annex_iv1.yaml            # Annex IV.1 System Identity Card
 │   ├── clinical_metadata.csv     # TCIA clinical spreadsheet
-│   ├── cohort_results.csv        # Inference results (generated)
+│   ├── cohort_results.csv               # MONAI inference results (generated)
+│   ├── cohort_results_totalseg.csv      # TotalSegmentator v2 cohort run (versioned)
 │   ├── trusted_metadata.csv      # DICOM metadata (generated)
 │   ├── dicom/                    # Downloaded DICOM volumes
 │   ├── models/                   # MONAI model bundle (Git LFS)
 │   │   └── wholeBody_ct_segmentation/
 │   └── policies/
-│       ├── data_policy.oscal.yaml
-│       └── model_policy.oscal.yaml
+│       ├── data_policy.oscal.yaml   # Canonical NIST OSCAL v1.2.2
+│       └── model_policy.oscal.yaml  # Canonical NIST OSCAL v1.2.2
 │
 └── debug/                        # Development utilities
 ```

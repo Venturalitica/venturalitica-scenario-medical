@@ -42,11 +42,19 @@ shared_data/clinical_metadata.csv
 shared_data/cohort_results.csv
 shared_data/trusted_metadata.csv
 .venturalitica/
+# Generated reports & demo artifacts
 compliance_report_sdk.md
+compliance_report_sdk_totalseg.md
+compliance_badge.svg
+compare_report.md
+Annex_IV.md
+Annex_IV.*.md
+demo_slices/
 # Dashboard-staged copies (canonical sources live in shared_data/)
 /system_description.yaml
 /data_policy.oscal.yaml
 /model_policy.oscal.yaml
+/assessment_plan.oscal.yaml
 compliance_plots/
 debug_outputs/
 uv.lock

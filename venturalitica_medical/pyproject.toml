@@ -1,6 +1,6 @@
 [project]
 name = "venturalitica-medical"
-version = "0.5.0"
+version = "0.6.0"
 description = "Spine segmentation with governance compliance and bias monitoring"
 requires-python = ">=3.11"
 dependencies = [
@@ -10,6 +10,6 @@ dependencies = [
     "pandas>=2.0.0",
     "matplotlib>=3.7.0",
     "scikit-image>=0.21.0",
-    "venturalitica>=0.6.8",
+    "venturalitica>=0.6.10",
     "codecarbon>=2.2.0",
 ]
