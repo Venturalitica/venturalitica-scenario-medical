@@ -1,136 +1,235 @@
 # Annex IV.1 — System Description (EU AI Act)
-# Provider: NovaMed Robotics | System: SpineGuard AI v1.0
+# Provider: NovaMed Robotics | System: VertebraSeg AI v1.0
 # Loaded by compliance_suite.py → venturalitica.models.SystemDescription
-#
-# Reference: Art. 11 + Annex IV, Section 1 (Technical Documentation)
-# Subsections (a)–(h) + foreseeable misuse per Art. 9(2)(b)
 
-name: "SpineGuard AI"
+name: "VertebraSeg AI"
 version: "1.0.0"
 provider_name: "NovaMed Robotics GmbH"
 
 # (a) Intended purpose & general description
-intended_purpose: >
-  AI-assisted pre-operative planning for spinal metastasis segmentation
-  in CT scans. Classified as MDR Class IIb medical device (software as
-  a medical device — SaMD) under EU AI Act Art. 6(1) high-risk category
-  (Annex I, Section A, Rule 11). Intended for use by board-certified
-  radiologists and spine surgeons in hospital settings to delineate
-  vertebral and paraspinal metastases for radiation therapy planning
-  and surgical approach assessment. Target population: adult patients
-  (18+) with confirmed or suspected spinal metastatic disease.
-  Clinical validation under multi-center IRB-approved protocol
-  (N=612 patients, 2,480 vertebral segments across 3 institutions).
+# Structured per EU MDR 2017/745 Annex II §1(c) and MDCG 2019-11 rev.1
+# (June 2025). Decomposes the intended purpose into the elements a
+# notified body expects to see for a Software-as-a-Medical-Device
+# submission: intended user, patient population, condition, environment,
+# duration, modality/output, and the IMDRF risk characterisation. The
+# document is plain prose so any reviewer can read it linearly.
+intended_purpose: |-
+  Intended user
+  -------------
+  Board-certified radiologists and spine surgeons reviewing pre-operative
+  spinal CT studies in a hospital radiology workflow. The system is NOT
+  intended for use by non-clinical operators, patients, or technicians
+  outside an institutional clinical pathway.
+
+  Intended patient population
+  ---------------------------
+  Adults (≥18 years) with confirmed or suspected spinal pathology
+  indicated for CT imaging — scoliosis, vertebral fracture, spinal
+  stenosis, degenerative disease, primary spine tumour, or spinal
+  metastasis. Excludes paediatric patients (<18 years): the training
+  cohort does not represent growth-plate anatomy.
+
+  Intended clinical condition / use
+  ---------------------------------
+  Automated segmentation of the vertebral bodies C1–S1 to provide an
+  anatomical reference for clinician review and for ingestion by
+  downstream planning tooling. The system supports — it does NOT
+  replace — clinical reasoning. It does not diagnose, grade lesions,
+  recommend treatment, plan surgical trajectories, or select implants.
+
+  Intended environment
+  --------------------
+  Hospital radiology department, backend service deployed inside the
+  hospital DMZ (VLAN-isolated, air-gap-capable). Reviewed through an
+  OHIF Viewer plugin within the institutional PACS. NOT intended for
+  home use, public-cloud deployment, or pre-hospital settings.
+
+  Intended duration of use
+  ------------------------
+  Per-study inference on a single pre-operative CT volume (median
+  90 s). The system does not perform continuous monitoring and does
+  not maintain state across studies beyond the institutional audit
+  trail.
+
+  Modality and output
+  -------------------
+  AI/ML semantic segmentation (3D convolutional). Output: a DICOM SEG
+  object carrying the 24 vertebral-body labels C1–S1, optionally
+  exported as an STL mesh, plus a per-vertebra Dice confidence value.
+  The output is always an INPUT to a human decision — the clinician
+  retains responsibility for any downstream action.
+
+  Regulatory classification
+  -------------------------
+  - IMDRF SaMD framework (per IMDRF/SaMD WG/N12 + N81 FINAL:2025):
+    Significance "drive clinical management"; healthcare situation
+    "serious"; resulting category III.
+  - EU MDR 2017/745 (per MDCG 2019-11 rev.1, June 2025): Rule 11 —
+    Class IIb medical device software.
+  - EU AI Act (Regulation 2024/1689): Annex I §A point 11 — high-risk
+    AI system; concurrent conformity assessment per MDCG 2025-6
+    (Medical Device AI, MDAI).
+  - Quality system: ISO 13485; software life-cycle: IEC 62304;
+    usability: IEC 62366-1:2015 + Amd 2020; risk management: ISO 14971:2019.
 
 # (b) Interaction with hardware and software
 interaction_description: >
   Integrates with hospital PACS via DICOM C-STORE SCP/SCU and DICOMweb
-  (WADO-RS, STOW-RS). Receives CT volumes, processes through SegResNet
-  (3D, 105-channel) sliding-window inference pipeline. Returns
-  segmentation as DICOM SEG objects or RT Structure Sets for direct
-  import into treatment planning systems. Operates as a backend
-  service within the clinical IT environment (hospital DMZ,
-  VLAN-isolated). No direct patient interaction.
+  (WADO-RS, STOW-RS). Receives CT volumes, processes through a
+  SegResNet (3D, 105-channel) sliding-window inference pipeline, and
+  emits the 24 vertebral body labels (C1–S1) as DICOM SEG objects.
+  Operates as a backend service within the clinical IT environment
+  (hospital DMZ, VLAN-isolated). No direct patient interaction. The
+  segmentation is consumed by downstream review and planning tools —
+  those tools are outside the scope of this Annex IV.
 
 # (c) Software dependencies and versions
 software_dependencies: >
   Runtime: Python 3.11.8, PyTorch 2.2.1 (CUDA 12.1), MONAI 1.3.1,
   MONAI Deploy 0.6. Model architecture: SegResNet (spatial_dims=3,
   in_channels=1, out_channels=105, init_filters=32,
-  blocks_down=[1,2,2,4], blocks_up=[1,1,1]). Inference: sliding window
-  (96x96x96 patches, 0.25 overlap, Gaussian importance weighting,
-  test-time augmentation with 4-fold axis flips). Pre-processing:
-  MONAI transforms (Spacing 1.0x1.0x1.0mm, ScaleIntensityRange
-  HU[-200,1500]→[0,1], CropForeground). Post-processing: connected
-  component analysis, vertebral labeling via centroid detection +
-  anatomical atlas (T1-L5-S1). DICOM I/O: pydicom 2.4.4,
-  highdicom 0.22.0. Orchestration and compliance: Venturalitica
-  SDK 0.5.3. Container base: Ubuntu 22.04 LTS. Dependency SBOM:
-  CycloneDX 1.5 ML profile (auto-generated per build).
+  blocks_down=[1,2,2,4], blocks_up=[1,1,1]). Inference: sliding
+  window (96x96x96 patches, 0.25 overlap, Gaussian importance
+  weighting, optional test-time augmentation with 4-fold axis flips).
+  Pre-processing: MONAI transforms (Spacing 1.0x1.0x1.0mm,
+  ScaleIntensityRange HU[-200,1500]→[0,1], CropForeground).
+  Post-processing: connected component analysis and vertebral level
+  assignment by centroid matching against an anatomical atlas.
+  DICOM I/O: pydicom 2.4.4, highdicom 0.22.0. Orchestration and
+  compliance: Venturalitica SDK 0.6.8. Container base: Ubuntu 22.04
+  LTS. Dependency SBOM: CycloneDX 1.6 ML profile (auto-generated
+  per build).
 
 # (d) Market placement form
 market_placement_form: >
-  On-premises deployment as signed OCI container image within hospital
-  DMZ infrastructure. No cloud processing of patient data — full
-  air-gap capable. Model weights distributed via signed OCI artifacts
-  with SLSA Level 3 provenance attestation. Licensing: per-site
-  annual subscription with CE-marked software release cycle (quarterly
-  updates, hotfixes within 72h SLA). Distribution through authorized
-  medical device distributors with mandatory on-site installation
-  and clinical validation by NovaMed field service engineers.
+  On-premises deployment as a signed OCI container image within
+  hospital DMZ infrastructure. No cloud processing of patient data —
+  full air-gap capable. Model weights distributed via signed OCI
+  artifacts with SLSA Level 3 provenance attestation. Licensing:
+  per-site annual subscription with CE-marked software release cycle
+  (quarterly updates, hotfixes within 72h SLA). Distribution through
+  authorized medical device distributors with mandatory on-site
+  installation and clinical validation by NovaMed field service
+  engineers.
 
 # (e) Hardware requirements
 hardware_description: >
   Minimum compute: NVIDIA CUDA-capable GPU with >= 8 GB VRAM
   (inference) or >= 24 GB VRAM (with test-time augmentation).
   Validated on: NVIDIA A100 40GB (data center, reference),
-  RTX 4090 24GB (workstation), T4 16GB (cloud inference —
-  planning-only mode). Host: 64-bit x86_64, minimum 32 GB RAM,
-  NVMe SSD with >= 500 GB (DICOM staging + model cache). Network:
-  DICOM receiver on port 11112, TLS 1.3 required for PHI transfer
-  (IHE ATNA compliant). Environmental: operating temperature 18-26°C.
+  RTX 4090 24GB (workstation), T4 16GB (cloud inference). Host:
+  64-bit x86_64, minimum 32 GB RAM, NVMe SSD with >= 500 GB (DICOM
+  staging + model cache). Network: DICOM receiver on port 11112,
+  TLS 1.3 required for PHI transfer (IHE ATNA compliant).
+  Environmental: operating temperature 18-26°C.
 
 # (f) External features and visual interface elements
 external_features: >
   Web-based review UI for radiologists (OHIF Viewer v3 integration
-  with custom SpineGuard plugin). Visual features: (1) 3D volumetric
-  rendering with adjustable bone/soft-tissue opacity and metastasis
-  color-coding, (2) multi-planar reconstruction (axial/sagittal/
-  coronal) with AI overlay toggle, (3) vertebral labels (C1-S5) with
-  per-vertebra Dice confidence score and uncertainty heatmap,
-  (4) 3D segmentation mesh export (STL) for surgical planning,
-  (5) PDF/DICOM SR structured report with measurement annotations
-  and tumor volume quantification.
+  with a VertebraSeg overlay plugin). Visual features: (1) 3D
+  volumetric rendering with bone-window opacity and per-vertebra
+  colour coding, (2) multi-planar reconstruction (axial / sagittal /
+  coronal) with the segmentation overlay toggle, (3) per-vertebra
+  Dice confidence score and uncertainty heatmap, (4) DICOM SEG /
+  STL export of the segmentation mesh for ingestion by downstream
+  planning systems. The UI does not offer trajectory planning,
+  treatment recommendations, or any decision-grade output beyond
+  the segmentation itself.
 
 # (g) User interface description
 ui_description: >
   Clinician dashboard: patient worklist with AI processing status
   (queued → processing → review required → approved → locked).
-  Case viewer: synchronized multi-planar display with AI segmentation
-  overlay, adjustable transparency slider, and manual contour editing
-  tools (brush, smart scissors, region grow). 3D spine visualization
-  with clickable vertebral bodies showing per-level metrics (Dice
-  score, tumor volume mL, vertebral body involvement %).
-  Audit panel: complete modification history with timestamped entries,
-  user identity (hospital AD/LDAP SSO), and reason-for-edit dropdowns
-  (clinical disagreement, boundary refinement, artifact correction,
-  false positive removal). Role-based access: surgeon (full edit),
-  radiologist (review + annotate), physicist (dosimetry export only),
-  auditor (read-only with full trail visibility).
+  Case viewer: synchronized multi-planar display with segmentation
+  overlay, adjustable transparency, and manual contour editing
+  tools (brush, smart scissors, region grow). Per-vertebra panel
+  showing Dice score and uncertainty. Audit panel: complete
+  modification history with timestamped entries, user identity
+  (hospital AD/LDAP SSO), and reason-for-edit dropdowns (clinical
+  disagreement, boundary refinement, artifact correction, false
+  positive removal). Role-based access: surgeon (full edit),
+  radiologist (review + annotate), auditor (read-only with full
+  trail visibility).
 
 # (h) Instructions for use
 instructions_for_use: >
   Input: DICOM CT volumes — axial acquisition, slice thickness
-  <= 1.5mm (optimal 0.625-1.0mm), soft-tissue reconstruction kernel,
-  contrast-enhanced preferred for soft-tissue metastases. Output:
-  3D segmentation mask (DICOM SEG with vertebral labels T1-S5 +
-  tumor regions), RT Structure Set for TPS import, 3D mesh (STL).
-  Workflow: PACS export → SpineGuard AI queue → automated inference
-  (median 90s per study) → clinician review → digital signature →
-  export to treatment planning system. MANDATORY: board-certified
+  <= 1.5mm (optimal 0.625-1.0mm), soft-tissue reconstruction kernel
+  preferred. Output: 3D segmentation mask (DICOM SEG with the 24
+  vertebral labels C1–S1) plus an STL mesh export. Workflow: PACS
+  export → VertebraSeg AI queue → automated inference (median 90s
+  per study) → clinician review → digital signature → export to the
+  downstream system of choice. MANDATORY: a board-certified
   physician must verify ALL segmentation boundaries before any
-  clinical decision. AI output is ADVISORY ONLY — the treating
-  physician retains full clinical responsibility. Developed per
-  IEC 62304 (software lifecycle), IEC 82304-1 (health software),
-  ISO 14971 (risk management), ISO 13485 (QMS), and IEC 62366-1
-  (usability engineering).
+  clinical decision derived from the segmentation. The AI output is
+  ADVISORY ONLY — the treating physician retains full clinical
+  responsibility for any downstream surgical or treatment decision.
+  Developed per IEC 62304 (software lifecycle), IEC 82304-1 (health
+  software), ISO 14971 (risk management), ISO 13485 (QMS), and
+  IEC 62366-1 (usability engineering).
 
-# (*) Foreseeable misuse — Art. 9(2)(b)
-potential_misuses: >
-  NOT intended for: (1) standalone diagnosis or treatment decisions
-  without qualified physician review — AI provides decision SUPPORT,
-  not autonomous clinical action, (2) pediatric patients under 18
-  years — training data excludes pediatric anatomy and growth plates,
-  (3) non-CT imaging modalities (MRI, X-ray, PET-CT fusion) — model
-  trained exclusively on CT Hounsfield unit distributions,
-  (4) emergency triage or real-time intraoperative decisions without
-  pre-operative CT baseline, (5) automated treatment plan generation
-  without physicist/dosimetrist verification — segmentation accuracy
-  alone does not guarantee treatment plan safety, (6) use in
-  non-validated acquisition protocols — degraded performance with
-  thick-slice CT (>2mm) or significant metal artifact from prior
-  instrumentation, (7) connection to public internet or cloud
-  services — system designed for air-gapped hospital DMZ operation
-  only, (8) use as sole evidence for clinical trial endpoint
-  assessment — requires independent central radiologist review
-  per RECIST 1.1 criteria.
+# (*) Foreseeable misuse — Art. 9(2)(b) EU AI Act
+# Structured per ISO 14971:2019 §3.16 + IEC 62366-1:2015 use-related
+# risk analysis. All items below are *reasonably foreseeable* misuses
+# that the manufacturer is obliged to mitigate via design controls,
+# labelling, training, or process safeguards. Items the manufacturer
+# is NOT obliged to mitigate (per ISO 14971: not-reasonably-foreseeable
+# abuse) are listed separately at the end.
+potential_misuses: |-
+  A. Use beyond the validated population (training-data scope)
+  ----------------------------------------------------------
+  - Paediatric patients (<18 years). Training data does not represent
+    growth-plate anatomy; segmentation will be silently miscalibrated.
+  - Acquisition protocols outside the validation envelope: slice
+    thickness >2 mm, non-soft-tissue reconstruction kernel, severe
+    metal artefact from prior instrumentation, contrast-only studies
+    where the soft-tissue window distorts cortical edges.
+  - Anatomical variants outside the cohort: extreme scoliosis (Cobb
+    angle >50°), congenital vertebral fusion, transitional
+    lumbosacral anatomy (sacralisation of L5 / lumbarisation of S1).
+
+  B. Use beyond the validated modality
+  -----------------------------------
+  - Application to MRI, plain X-ray, or PET-CT fusion images. The
+    model is trained exclusively on CT Hounsfield distributions and
+    will produce confident but invalid segmentations on other
+    modalities.
+  - Use of the segmentation as a diagnostic-grade measurement (tumour
+    volumetry, fracture grading, bone-mineral-density estimation).
+    The output is geometric only; quantitative use requires a
+    separately validated post-processing pipeline.
+
+  C. Use beyond the validated user and environment
+  -----------------------------------------------
+  - Direct use by patients, technicians, or any operator outside the
+    board-certified radiologist / spine-surgeon role defined under
+    intended user.
+  - Deployment outside the hospital DMZ: public-cloud hosting,
+    internet-exposed inference endpoints, or any configuration that
+    transmits CT volumes off-premise.
+
+  D. Downstream cascading misuse (Art. 9(2)(b) EU AI Act)
+  ------------------------------------------------------
+  - Use of the segmentation as an input to surgical trajectory
+    planning, pedicle-screw selection, radiotherapy dose calculation,
+    or any other clinical pipeline that has not been independently
+    validated against this segmentation output. The AI is not
+    qualified as a component of such pipelines.
+  - Bypassing the mandatory clinician review step (e.g. auto-export
+    to the treatment planning system without digital signature).
+    This defeats the human-oversight safeguard required by EU AI Act
+    Art. 14 and converts the system from advisory to autonomous —
+    a use mode it is NOT validated for.
+  - Reliance on the per-vertebra Dice confidence as a substitute for
+    clinician review. The confidence is a calibration aid, not a
+    pass/fail indicator.
+
+  E. Out of scope (per ISO 14971 — not reasonably foreseeable)
+  -----------------------------------------------------------
+  - Adversarial DICOM injection attacks designed to fool the
+    segmentation. Handled by hospital IT security and the DICOM
+    firewall, not by the SaMD itself.
+  - Physical tampering with the inference hardware. Handled by
+    hospital biomedical-engineering processes.
+  - Use after the announced end-of-life or after a withdrawn version
+    is reinstalled against the vendor's instructions.

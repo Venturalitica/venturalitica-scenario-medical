@@ -6,7 +6,9 @@ requires-python = ">=3.11"
 dependencies = [
     "pandas>=2.0.0",
     "numpy>=1.24.0",
-    "venturalitica>=0.5.1",
+    "venturalitica[agentic]>=0.6.8",
+    "streamlit>=1.57.0",
+    "totalsegmentator>=2.13",
 ]
 
 [project.optional-dependencies]
@@ -20,3 +22,10 @@ gpu = [
 full = [
     "venturalitica-scenario-medical[gpu]",
 ]
+
+# Resolve the SDK from the integration monorepo when this scenario is
+# checked out as a submodule of venturalitica-integration. When the
+# scenario is consumed standalone, drop this section and the published
+# `venturalitica` package on PyPI is used.
+[tool.uv.sources]
+venturalitica = { path = "../packages/venturalitica-sdk", editable = true }

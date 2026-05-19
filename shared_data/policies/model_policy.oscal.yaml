@@ -1,111 +1,189 @@
-assessment-plan:
+# EU AI Act Art. 15 — Model Performance (Vertebra Segmentation)
+#
+# Canonical NIST OSCAL v1.2.2 `component-definition` envelope.
+# See data_policy.oscal.yaml for migration notes and conventions.
+#
+# Scope: vertebral body segmentation from CT (C1–S1). The model's
+# only output is the segmentation mask. Downstream surgical planning
+# is out of scope of this policy — separately validated tooling
+# handles trajectory, screw selection, and clinical decisions.
+---
+component-definition:
+  uuid: 089cea34-c18b-51fb-b969-b7c64fc16472  # uuid5(NS_CD, "vertebraseg-ai:1.0.0")
   metadata:
-    title: "EU AI Act Art. 15 — Model Performance (Spine Segmentation)"
-    version: "2.0.0"
-    oscal-version: "1.0.0"
+    title: "EU AI Act Art. 15 — Model Performance (Vertebra Segmentation)"
+    last-modified: "2026-05-17T00:00:00.000Z"
+    version: "3.0.0"
+    oscal-version: "1.2.2"
+    # props:
+    #   - { name: ai-system-uuid,         value: "<stamped by SaaS AP emitter>" }
+    #   - { name: ai-system-version-uuid, value: "<stamped by SaaS AP emitter>" }
+  components:
+    - uuid: 1e5d1cf9-6d16-57ca-ad00-10421af4f45c  # uuid5(NS_C, "vertebraseg-ai:1.0.0")
+      type: software
+      title: "VertebraSeg AI v1.0.0"
+      description: "AI System Version with deployed AssuranceMeasures (Art. 15 vertebra segmentation performance)."
+      control-implementations:
+        - uuid: ae3c72aa-4a88-5064-a028-62c9abf82c35  # uuid5(NS_CI, "vertebraseg-ai:1.0.0")
+          source: "#vl-ai-assurance-profile-2026"
+          description: "Vertebra-segmentation guardrails enforced at validation time."
+          implemented-requirements:
+            # --- Article 15: Accuracy ---
+            - uuid: 86839918-5f76-5659-8940-8a49089ac817
+              control-id: vertebra-segmentation-dice
+              description: "Global Mean Dice over all vertebrae (C1–S1) > 0.85."
+              props:
+                - { name: metric_key,              value: global_dice }
+                - { name: operator,                value: gt }
+                - { name: threshold,               value: "0.85" }
+                - { name: severity,                value: critical }
+                - { name: enforcement_mode,        value: block }
+                - { name: evaluation_method,       value: automated }
+                - { name: lifecycle_phase,         value: validation }
+                - { name: evaluation_window,       value: "per-cohort" }
+                - { name: risk_id,                 value: "RISK-VERT-ACC-001" }
+                - { name: policy_id,               value: "POL-EU-AIACT-15" }
+                - { name: risk_acceptance_criteria, value: "No clinical deployment if cohort-wide mean Dice falls below 0.85; trigger model retraining and revalidation before re-release." }
+                - { name: threshold_justification, value: "0.85 Dice is the lower bound of clinically reviewable vertebral segmentation. SOTA nnU-Net on VerSe'20 reports 0.917 mean Dice; CTSpine1K reports 0.84; below 0.85 the segmentation requires excessive manual correction to be usable as a planning input." }
+                - { name: article,                 value: "15" }
 
-  reviewed-controls:
-    control-implementations:
-      - description: "Article 15: Accuracy"
-        implemented-requirements:
-          - control-id: model-accuracy-global
-            description: "Global Mean Dice > 0.85"
-            props:
-              - name: severity
-                value: critical
-              - name: metric_key
-                value: global_dice
-              - name: threshold
-                value: "0.85"
-              - name: operator
-                value: gt
-              - name: article
-                value: "15"
+            - uuid: ab91d453-ef49-50e3-934f-e78545809cef
+              control-id: data-leakage-check
+              description: "Max single-case Dice < 0.99 to exclude train-test leakage."
+              props:
+                - { name: metric_key,              value: max_single_dice }
+                - { name: operator,                value: lt }
+                - { name: threshold,               value: "0.99" }
+                - { name: severity,                value: critical }
+                - { name: enforcement_mode,        value: block }
+                - { name: evaluation_method,       value: automated }
+                - { name: lifecycle_phase,         value: validation }
+                - { name: evaluation_window,       value: "per-cohort" }
+                - { name: risk_id,                 value: "RISK-VERT-LEAK-002" }
+                - { name: policy_id,               value: "POL-EU-AIACT-15" }
+                - { name: threshold_justification, value: "Dice >= 0.99 on any single case is statistically improbable for a hold-out subject and signals train/test contamination. Calibrated against the published MONAI wholeBody_ct_segmentation validation distribution (median 0.91, p99 0.96)." }
+                - { name: article,                 value: "15" }
 
-          - control-id: data-leakage-check
-            description: "Max Dice < 0.99 to exclude train-test leakage"
-            props:
-              - name: severity
-                value: critical
-              - name: metric_key
-                value: max_single_dice
-              - name: threshold
-                value: "0.99"
-              - name: operator
-                value: lt
-              - name: article
-                value: "15"
+            # --- Article 15: Robustness / Fairness (MICCAI / FAIMI-grounded) ---
+            # These controls follow the subgroup-disparity discipline laid
+            # out in the FAIMI (Fairness of AI in Medical Imaging) MICCAI
+            # workshop series and the npj Digital Medicine 2024 systematic
+            # review on fairness in medical image analysis. Each control
+            # reports a Rawlsian *worst-case* Dice across a sensitive
+            # stratum so that a model with a strong overall mean cannot
+            # mask a subgroup failure.
+            - uuid: d45df328-810b-5c7b-8d79-078d491e36c2
+              control-id: robustness-scanner-bias
+              description: "Min Dice > 0.85 across all scanner manufacturers."
+              props:
+                - { name: metric_key,        value: min_scanner_dice }
+                - { name: operator,          value: gt }
+                - { name: threshold,         value: "0.85" }
+                - { name: severity,          value: high }
+                - { name: enforcement_mode,  value: block }
+                - { name: evaluation_method, value: automated }
+                - { name: lifecycle_phase,   value: validation }
+                - { name: article,           value: "15" }
 
-      - description: "Article 15: Robustness"
-        implemented-requirements:
-          - control-id: robustness-scanner-bias
-            description: "Min Dice > 0.85 across all scanner manufacturers"
-            props:
-              - name: severity
-                value: high
-              - name: metric_key
-                value: min_scanner_dice
-              - name: threshold
-                value: "0.85"
-              - name: operator
-                value: gt
-              - name: article
-                value: "15"
+            - uuid: eb166d55-76ec-5a3b-ae3b-a5ba2b13d443
+              control-id: fairness-scanner-model
+              description: "Min Dice > 0.80 across ManufacturerModelName (finer-grained than brand)."
+              props:
+                - { name: metric_key,              value: min_scanner_model_dice }
+                - { name: operator,                value: gt }
+                - { name: threshold,               value: "0.80" }
+                - { name: severity,                value: high }
+                - { name: enforcement_mode,        value: block }
+                - { name: evaluation_method,       value: automated }
+                - { name: lifecycle_phase,         value: validation }
+                - { name: risk_id,                 value: "RISK-VERT-MODELBIAS-004" }
+                - { name: policy_id,               value: "POL-EU-AIACT-15" }
+                - { name: threshold_justification, value: "Glocker et al. (MICCAI'23) and the FAIMI 2024 review report that scanner-brand-level analysis under-detects bias compared to per-model analysis: two scanners of the same brand can carry different reconstruction kernels and dose profiles. The 0.80 floor mirrors the brand-level threshold relaxed by one notch to account for smaller per-model sample sizes." }
+                - { name: article,                 value: "15" }
 
-          - control-id: robustness-lesion-type
-            description: "Robustness across Lytic/Blastic clinical phenotypes > 0.80"
-            props:
-              - name: severity
-                value: high
-              - name: metric_key
-                value: min_lesion_type_dice
-              - name: threshold
-                value: "0.80"
-              - name: operator
-                value: gt
-              - name: article
-                value: "15"
+            - uuid: 60a37cd7-da46-5b7f-90e8-cd263d063a14
+              control-id: fairness-slice-thickness
+              description: "Min Dice > 0.80 across slice-thickness strata (≤1 / 1-2 / >2 mm)."
+              props:
+                - { name: metric_key,              value: min_thickness_dice }
+                - { name: operator,                value: gt }
+                - { name: threshold,               value: "0.80" }
+                - { name: severity,                value: high }
+                - { name: enforcement_mode,        value: block }
+                - { name: evaluation_method,       value: automated }
+                - { name: lifecycle_phase,         value: validation }
+                - { name: risk_id,                 value: "RISK-VERT-THICKNESS-005" }
+                - { name: policy_id,               value: "POL-EU-AIACT-15" }
+                - { name: threshold_justification, value: "MONAI's wholeBody_ct_segmentation is trained predominantly on sub-millimetre TotalSegmentator data. Acquisitions at 2.5 mm thickness or above lose vertebral edge fidelity. Stratifying by thickness exposes the protocol-dependence emphasised in the FAIMI 2025 workshop on technical-attribute fairness." }
+                - { name: article,                 value: "15" }
 
-          - control-id: robustness-cancer-types
-            description: "Min Dice > 0.80 for top 3 cancer types"
-            props:
-              - name: severity
-                value: critical
-              - name: metric_key
-                value: min_cancer_dice
-              - name: threshold
-                value: "0.80"
-              - name: operator
-                value: gt
-              - name: article
-                value: "15"
+            # Petersen et al. (Nature Medicine 2024) and the FAIMI 2024
+            # systematic review identified the elderly-vs-younger gap as
+            # one of the most under-reported failure modes in CT
+            # segmentation. The metric is the |mean Dice ≥65 − mean Dice <65|
+            # absolute difference; it is computed in Phase 2 against the
+            # inference-derived Dice column, hence its placement here
+            # under the model policy rather than the data policy.
+            - uuid: fe707aff-ae03-5c29-87f6-ff08a074e5e4
+              control-id: fairness-age-elderly
+              description: "Mean Dice gap between elderly (≥65) and <65 patients must stay below 0.05."
+              props:
+                - { name: metric_key,              value: elderly_dice_gap }
+                - { name: operator,                value: lt }
+                - { name: threshold,               value: "0.05" }
+                - { name: severity,                value: high }
+                - { name: enforcement_mode,        value: block }
+                - { name: evaluation_method,       value: automated }
+                - { name: lifecycle_phase,         value: validation }
+                - { name: risk_id,                 value: "RISK-VERT-AGEBIAS-007" }
+                - { name: policy_id,               value: "POL-EU-AIACT-15" }
+                - { name: threshold_justification, value: "Petersen et al. 2024 (Nature Medicine) report elderly-female subgroup gaps of 3-7% Dice on CT organ segmentation tasks. Allowing a >5% mean-Dice gap between the elderly cohort and the rest would mask a structural under-performance on the population most exposed to spinal interventions." }
+                - { name: article,                 value: "15" }
 
-      - description: "Article 15: Safety"
-        implemented-requirements:
-          - control-id: safety-small-volume
-            description: "Safety on small lesions (bottom 25% volume) > 0.75 Dice"
-            props:
-              - name: severity
-                value: critical
-              - name: metric_key
-                value: small_vol_dice
-              - name: threshold
-                value: "0.75"
-              - name: operator
-                value: gt
-              - name: article
-                value: "15"
+            - uuid: 93ea408f-9ed9-5fe7-9d65-c240baea5f04
+              control-id: worst-subgroup-dice
+              description: "Rawlsian min Dice across the intersection of all declared subgroups (sex × age group × scanner model × thickness bucket)."
+              props:
+                - { name: metric_key,              value: worst_subgroup_dice }
+                - { name: operator,                value: gt }
+                - { name: threshold,               value: "0.75" }
+                - { name: severity,                value: critical }
+                - { name: enforcement_mode,        value: block }
+                - { name: evaluation_method,       value: automated }
+                - { name: lifecycle_phase,         value: validation }
+                - { name: risk_id,                 value: "RISK-VERT-INTERSECTIONAL-006" }
+                - { name: policy_id,               value: "POL-EU-AIACT-15" }
+                - { name: threshold_justification, value: "Per Petersen et al. (Nature Medicine 2024) and the FAIMI MICCAI 2024/2025 reviews, mean and per-axis subgroup analyses miss intersectional failure modes (e.g. elderly female on a thick-slice non-reference scanner). The Rawlsian min across the full cross-product surfaces the worst-served patient — the relevant safety threshold for a high-risk SaMD." }
+                - { name: article,                 value: "15" }
 
-          - control-id: safety-calibration
-            description: "Positive correlation (r > 0.5) between Confidence and Dice"
-            props:
-              - name: severity
-                value: medium
-              - name: metric_key
-                value: confidence_correlation
-              - name: threshold
-                value: "0.5"
-              - name: operator
-                value: gt
-              - name: article
-                value: "15"
+            # --- Article 15: Safety ---
+            - uuid: 90418857-02a0-5512-b6e6-5f2c85c8f81f
+              control-id: safety-small-vertebra
+              description: "Safety on small vertebrae (bottom 25% volume) > 0.75 Dice."
+              props:
+                - { name: metric_key,              value: small_vol_dice }
+                - { name: operator,                value: gt }
+                - { name: threshold,               value: "0.75" }
+                - { name: severity,                value: critical }
+                - { name: enforcement_mode,        value: block }
+                - { name: evaluation_method,       value: hybrid }
+                - { name: lifecycle_phase,         value: validation }
+                - { name: evaluation_window,       value: "per-cohort" }
+                - { name: risk_id,                 value: "RISK-VERT-SMALL-003" }
+                - { name: policy_id,               value: "POL-EU-AIACT-15" }
+                - { name: risk_acceptance_criteria, value: "Small vertebral bodies (cervical C2–C4, paediatric-like proportions, post-osteoporotic compression fractures) carry the highest segmentation risk. A 0.75 Dice floor on the bottom-quartile volume preserves usability of the segmentation as a planning input." }
+                - { name: stakeholder_consultation_ref, value: "Threshold ratified by NovaMed Clinical Advisory Board, Q1 2026, with radiology and spine-surgery representation." }
+                - { name: article,                 value: "15" }
+
+            - uuid: 6dd13b8f-ae2b-5a0e-8602-f8a329b41ea9
+              control-id: safety-calibration
+              description: "Positive correlation (r > 0.5) between Confidence and Dice."
+              props:
+                - { name: metric_key,        value: confidence_correlation }
+                - { name: operator,          value: gt }
+                - { name: threshold,         value: "0.5" }
+                - { name: severity,          value: medium }
+                - { name: enforcement_mode,  value: warn }
+                - { name: evaluation_method, value: automated }
+                - { name: lifecycle_phase,   value: validation }
+                - { name: article,           value: "15" }

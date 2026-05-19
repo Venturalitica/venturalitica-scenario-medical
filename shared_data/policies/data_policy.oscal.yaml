@@ -1,81 +1,107 @@
-assessment-plan:
+# EU AI Act Art. 10 — Data Governance (Spine Segmentation)
+#
+# Canonical NIST OSCAL v1.2.2 `component-definition` envelope.
+# Migrated from the legacy `assessment-plan + control-implementations[]`
+# shape on 2026-05-17 (see venturalitica/CLAUDE.md "OSCAL Policy Format").
+#
+# Loaded by the Venturalitica SDK (>= 0.6.0) via OSCALPolicyLoader, which
+# accepts only the four canonical NIST roots: catalog, profile,
+# component-definition, system-security-plan.
+#
+# Conventions used here:
+#   - UUIDs are deterministic UUID v5 (namespace: VL_OSCAL_NAMESPACE,
+#     sub-namespace per object kind). Same (kind, id) pair ALWAYS yields
+#     the same UUID — so re-emitting this document is idempotent and the
+#     SaaS can correlate documents over time.
+#   - Input bindings use `input.<slot>` (NIST regex requires dot, not colon).
+#   - `lifecycle_phase`, `enforcement_mode`, `evaluation_method`, `risk_id`
+#     are recognized profile properties — the SDK carries them into the
+#     emitted assessment-results as CharacterizationFacets.
+#
+# When the SaaS push is wired (later), the SaaS-side AP emitter stamps
+# `ai-system-uuid` and `ai-system-version-uuid` into metadata.props[]
+# below so the platform binds findings back to the correct AISystemVersion
+# by UUID. Slots are reserved (commented out) below — leave them empty
+# until the SaaS pull is in place.
+---
+component-definition:
+  uuid: 089cea34-c18b-51fb-b969-b7c64fc16472  # uuid5(NS_CD, "vertebraseg-ai:1.0.0")
   metadata:
-    title: "EU AI Act Art. 10 — Data Governance (Spine Segmentation)"
-    version: "2.0.0"
-    oscal-version: "1.0.0"
+    title: "EU AI Act Art. 10 — Data Governance (Vertebra Segmentation)"
+    last-modified: "2026-05-17T00:00:00.000Z"
+    version: "3.0.0"
+    oscal-version: "1.2.2"
+    # props:
+    #   - { name: ai-system-uuid,         value: "<stamped by SaaS AP emitter>" }
+    #   - { name: ai-system-version-uuid, value: "<stamped by SaaS AP emitter>" }
+  components:
+    - uuid: 1e5d1cf9-6d16-57ca-ad00-10421af4f45c  # uuid5(NS_C, "vertebraseg-ai:1.0.0")
+      type: software
+      title: "VertebraSeg AI v1.0.0"
+      description: "AI System Version with deployed AssuranceMeasures (Art. 10 data governance)."
+      control-implementations:
+        - uuid: ae3c72aa-4a88-5064-a028-62c9abf82c35  # uuid5(NS_CI, "vertebraseg-ai:1.0.0")
+          source: "#vl-ai-assurance-profile-2026"
+          description: "Data governance guardrails enforced at training/validation time."
+          implemented-requirements:
+            # --- Article 10: Fairness & Representativeness ---
+            - uuid: 836b6f72-70aa-5689-a0dd-2ab91f219c68
+              control-id: fairness-sex-disparate-impact
+              description: "Disparate impact ratio across biological sex must exceed 0.80 (four-fifths rule)."
+              props:
+                - { name: metric_key,        value: disparate_impact }
+                - { name: operator,          value: gt }
+                - { name: threshold,         value: "0.80" }
+                - { name: severity,          value: high }
+                - { name: enforcement_mode,  value: block }
+                - { name: evaluation_method, value: automated }
+                - { name: lifecycle_phase,   value: training }
+                - { name: input.target,      value: is_successful }
+                - { name: input.prediction,  value: is_successful }
+                - { name: input.dimension,   value: Sex }
+                - { name: article,           value: "10" }
 
-  reviewed-controls:
-    control-implementations:
-      - description: "Article 10: Fairness & Representativeness"
-        implemented-requirements:
-          - control-id: fairness-sex-disparate-impact
-            description: "Disparate impact ratio across biological sex must exceed 0.80 (four-fifths rule)"
-            props:
-              - name: severity
-                value: high
-              - name: metric_key
-                value: disparate_impact
-              - name: threshold
-                value: "0.80"
-              - name: operator
-                value: gt
-              - name: "input:target"
-                value: "is_successful"
-              - name: "input:prediction"
-                value: "is_successful"
-              - name: "input:dimension"
-                value: "Sex"
-              - name: article
-                value: "10"
+            - uuid: 7bf60e19-7581-5ba9-ad77-00baa53424ee
+              control-id: fairness-age-demographic-parity
+              description: "Demographic parity difference across age groups must be below 0.15."
+              props:
+                - { name: metric_key,        value: demographic_parity_diff }
+                - { name: operator,          value: lt }
+                - { name: threshold,         value: "0.15" }
+                - { name: severity,          value: high }
+                - { name: enforcement_mode,  value: block }
+                - { name: evaluation_method, value: automated }
+                - { name: lifecycle_phase,   value: training }
+                - { name: input.target,      value: is_successful }
+                - { name: input.prediction,  value: is_successful }
+                - { name: input.dimension,   value: age_group }
+                - { name: article,           value: "10" }
 
-          - control-id: fairness-age-demographic-parity
-            description: "Demographic parity difference across age groups must be below 0.15"
-            props:
-              - name: severity
-                value: high
-              - name: metric_key
-                value: demographic_parity_diff
-              - name: threshold
-                value: "0.15"
-              - name: operator
-                value: lt
-              - name: "input:target"
-                value: "is_successful"
-              - name: "input:prediction"
-                value: "is_successful"
-              - name: "input:dimension"
-                value: "age_group"
-              - name: article
-                value: "10"
 
-      - description: "Article 10: Privacy & Data Quality"
-        implemented-requirements:
-          - control-id: privacy-k-anonymity
-            description: "Patient quasi-identifiers must satisfy k >= 3 anonymity"
-            props:
-              - name: severity
-                value: high
-              - name: metric_key
-                value: k_anonymity
-              - name: threshold
-                value: "3"
-              - name: operator
-                value: gte
-              - name: quasi_identifiers
-                value: "Age,Sex,Manufacturer"
-              - name: article
-                value: "10"
+            # --- Article 10: Privacy & Data Quality ---
+            - uuid: fad06d11-9a5a-5e79-8cfd-f97996c8e2fd
+              control-id: privacy-k-anonymity
+              description: "Patient quasi-identifiers must satisfy k >= 3 anonymity."
+              props:
+                - { name: metric_key,        value: k_anonymity }
+                - { name: operator,          value: gte }
+                - { name: threshold,         value: "3" }
+                - { name: severity,          value: high }
+                - { name: enforcement_mode,  value: block }
+                - { name: evaluation_method, value: automated }
+                - { name: lifecycle_phase,   value: training }
+                - { name: quasi_identifiers, value: "Age,Sex,Manufacturer" }
+                - { name: article,           value: "10" }
 
-          - control-id: data-quality-completeness
-            description: "Dataset completeness across all columns must exceed 90%"
-            props:
-              - name: severity
-                value: medium
-              - name: metric_key
-                value: data_completeness
-              - name: threshold
-                value: "0.90"
-              - name: operator
-                value: gte
-              - name: article
-                value: "10"
+            - uuid: a84afd8b-db0c-5f1b-ba8b-54c37039da13
+              control-id: data-quality-completeness
+              description: "Dataset completeness across all columns must exceed 90%."
+              props:
+                - { name: metric_key,        value: data_completeness }
+                - { name: operator,          value: gte }
+                - { name: threshold,         value: "0.90" }
+                - { name: severity,          value: medium }
+                - { name: enforcement_mode,  value: warn }
+                - { name: evaluation_method, value: automated }
+                - { name: lifecycle_phase,   value: training }
+                - { name: article,           value: "10" }

@@ -1,6 +1,6 @@
 # Medical Spine Segmentation — EU AI Act Compliance Demo
 
-**Venturalitica SDK v0.5** — Three-layer compliance audit on a real medical imaging pipeline.
+**Venturalitica SDK v0.6** — Three-layer compliance audit on a real medical imaging pipeline. Policies use canonical NIST OSCAL v1.2.2 `component-definition` envelopes (migrated 2026-05-17).
 
 This repository demonstrates how to add EU AI Act compliance controls to an existing ML system — without changing the model or the inference code. It downloads real DICOM data from a public cancer imaging archive, runs GPU inference with a pre-trained MONAI model, and then audits the entire pipeline against 11 regulatory controls using the Venturalitica SDK.
 
